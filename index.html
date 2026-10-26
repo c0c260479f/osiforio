@@ -1,0 +1,1203 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>追いつきリスト</title>
+<meta name="description" content="長く続く作品を、何から・どの順で追えばいいかをリストにして、チェックしながら進めるアプリ。">
+<meta name="theme-color" content="#F5F6FA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#10121B" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="追いつき">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=IBM+Plex+Mono:wght@500&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: one phone-width column. The list reads like a printed setlist (numbered, dashed rules); progress is a row of penlight-like segments. */
+:root {
+  --paper: #F5F6FA;
+  --surface: #FFFFFF;
+  --ink: #1B1E2D;
+  --muted: #5E657A;
+  --line: #DADEE8;
+  --accent: #C92F65;
+  --accent-soft: #FAE6EE;
+  --accent-ink: #A51F51;
+  --on-accent: #FFFFFF;
+  --warn-soft: #FFF3D3;
+  --warn-ink: #6F4E00;
+  --danger: #B42318;
+  --focus: #2F5BD3;
+  --scrim: rgba(16, 18, 30, 0.45);
+  --font-display: "Dela Gothic One", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10121B; --surface: #181B27; --ink: #E7E9F1; --muted: #9AA1B6; --line: #2C3043;
+    --accent: #FF6B9A; --accent-soft: #351C28; --accent-ink: #FF93B6; --on-accent: #1B0A12;
+    --warn-soft: #362C12; --warn-ink: #F0D07C; --danger: #FF8A7A; --focus: #8EA9FF;
+    --scrim: rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10121B; --surface: #181B27; --ink: #E7E9F1; --muted: #9AA1B6; --line: #2C3043;
+  --accent: #FF6B9A; --accent-soft: #351C28; --accent-ink: #FF93B6; --on-accent: #1B0A12;
+  --warn-soft: #362C12; --warn-ink: #F0D07C; --danger: #FF8A7A; --focus: #8EA9FF;
+  --scrim: rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--paper); }
+html { -webkit-tap-highlight-color: transparent; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-text-size-adjust: 100%;
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 10; background: var(--paper);
+}
+h1, h2, h3, p { margin: 0; }
+h1, h2 { text-wrap: balance; }
+a { color: var(--accent-ink); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* bars and page column */
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--paper); border-bottom: 1px solid var(--line);
+}
+.bar-in {
+  max-width: 640px; margin: 0 auto; min-height: 54px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.bar-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.brand { font-family: var(--font-display); font-size: 19px; letter-spacing: 0.02em; }
+.wrap {
+  max-width: 640px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 64px;
+  display: grid; gap: 24px;
+}
+.wrap > section { display: grid; gap: 10px; min-width: 0; }
+
+/* type */
+.label { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); }
+.lead { font-size: 15px; }
+.hint, .foot { font-size: 13px; color: var(--muted); }
+.work { font-size: 13px; color: var(--muted); font-weight: 500; }
+.list-title { font-size: 23px; line-height: 1.35; font-weight: 700; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 13px; color: var(--muted); }
+.badge { display: inline-block; font-size: 11.5px; font-weight: 700; line-height: 1.6; border: 1px solid currentColor; border-radius: 6px; padding: 0 6px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* buttons */
+.btn-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn {
+  font: inherit; font-size: 15px; font-weight: 700; line-height: 1.2;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 0 18px; border-radius: 999px;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+  cursor: pointer; text-decoration: none;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--accent-ink); padding: 0 6px; }
+.btn.danger { color: var(--danger); }
+.btn.danger.armed { background: var(--danger); border-color: var(--danger); color: var(--surface); }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.small-btn {
+  font: inherit; font-size: 13.5px; font-weight: 700; min-height: 36px; padding: 0 12px;
+  border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.small-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.small-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+.back { font: inherit; font-weight: 700; font-size: 14px; border: 0; background: none; color: var(--ink); cursor: pointer; padding: 8px 0; }
+
+/* notices */
+.notice { background: var(--warn-soft); color: var(--warn-ink); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; }
+.errors { background: var(--warn-soft); color: var(--danger); border-radius: 10px; padding: 10px 12px; font-size: 14px; display: grid; gap: 4px; }
+
+/* home */
+.cards { display: grid; gap: 10px; }
+.list-card {
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px; display: grid; gap: 4px; width: 100%;
+}
+.list-card:hover { border-color: var(--muted); }
+.lc-work { font-size: 12.5px; color: var(--muted); }
+.lc-title { font-size: 16.5px; font-weight: 700; line-height: 1.4; }
+.lc-meter { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.mini { flex: 1; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.mini > span { display: block; height: 100%; background: var(--accent); }
+.lc-pct { font-family: var(--font-mono); font-size: 13px; color: var(--muted); min-width: 3.2em; text-align: right; }
+
+/* meter */
+.meter-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pct { font-family: var(--font-display); font-size: 46px; line-height: 1; color: var(--accent-ink); }
+.pct small { font-size: 20px; margin-left: 2px; }
+.count { font-size: 14px; color: var(--muted); }
+.segs { display: flex; gap: 3px; height: 12px; }
+.segs.dense { gap: 1px; }
+.seg { flex: 1; border-radius: 3px; background: var(--line); min-width: 0; }
+.segs.dense .seg { border-radius: 1px; }
+.seg.on { background: var(--accent); }
+.type-progress { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }
+.type-progress b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); }
+
+/* next */
+.next { background: var(--accent-soft); border-radius: var(--radius); padding: 16px; display: grid; gap: 8px; }
+.eyebrow { font-size: 12.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--accent-ink); }
+.next-title { font-size: 19px; line-height: 1.45; font-weight: 700; overflow-wrap: anywhere; }
+.next-sub { font-size: 13px; color: var(--muted); }
+.next .btn-row { margin-top: 4px; }
+.then { font-size: 13px; color: var(--muted); }
+.pop { animation: pop 0.35s ease-out; }
+@keyframes pop { from { transform: scale(0.98); opacity: 0.6; } to { transform: none; opacity: 1; } }
+
+/* controls */
+.controls { display: grid; gap: 10px; }
+.seg-ctl {
+  display: inline-flex; gap: 3px; padding: 3px; max-width: 100%; overflow-x: auto;
+  border: 1.5px solid var(--line); border-radius: 999px; background: var(--surface); justify-self: start;
+}
+.seg-ctl button {
+  font: inherit; font-size: 13.5px; font-weight: 700; white-space: nowrap; cursor: pointer;
+  border: 0; border-radius: 999px; padding: 6px 12px; background: transparent; color: var(--muted);
+}
+.seg-ctl button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font: inherit; font-size: 13.5px; cursor: pointer; line-height: 1.5;
+  border: 1.5px solid var(--line); border-radius: 999px; padding: 4px 12px;
+  background: var(--surface); color: var(--ink);
+}
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); font-weight: 700; }
+.chip .n { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-left: 4px; }
+
+/* setlist items */
+.items { list-style: none; margin: 0; padding: 0; border-top: 1px dashed var(--line); }
+.item {
+  display: grid; grid-template-columns: 2.1em 38px minmax(0, 1fr); gap: 10px; align-items: start;
+  padding: 12px 0; border-bottom: 1px dashed var(--line);
+}
+.num { font-family: var(--font-mono); font-size: 13px; color: var(--muted); text-align: right; padding-top: 9px; font-variant-numeric: tabular-nums; }
+.check {
+  width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+  border: 2px solid var(--line); background: var(--surface); color: transparent; padding: 0;
+}
+.check:hover { border-color: var(--accent); }
+.check[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.item details { min-width: 0; }
+.item summary { list-style: none; cursor: pointer; display: grid; gap: 3px; padding-top: 6px; }
+.item summary::-webkit-details-marker { display: none; }
+.item-title { font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
+.item.done .item-title { color: var(--muted); }
+.sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12.5px; color: var(--muted); }
+.type-tag { border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; font-size: 12px; line-height: 1.6; }
+.warn-tag { background: var(--warn-soft); color: var(--warn-ink); border-radius: 999px; padding: 0 8px; font-size: 12px; line-height: 1.6; }
+.detail { display: grid; gap: 10px; padding: 8px 0 2px; font-size: 14px; }
+.note { white-space: pre-wrap; overflow-wrap: anywhere; }
+.gate { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-size: 13.5px; }
+.links-row { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13.5px; }
+.links-row a { font-weight: 700; }
+
+/* glossary and links */
+.terms { margin: 0; display: grid; gap: 12px; }
+.terms dt { font-weight: 700; }
+.terms dd { margin: 2px 0 0; font-size: 14px; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.terms .locked { color: var(--muted); }
+.plain-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.plain-list a { font-weight: 700; overflow-wrap: anywhere; }
+.disclaimer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+
+/* editor */
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > span, .field-label { font-size: 13px; font-weight: 700; color: var(--muted); }
+input[type="text"], input[type="url"], input[type="date"], textarea, select {
+  font: inherit; font-size: 16px; color: var(--ink); background: var(--surface);
+  border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 11px; width: 100%; min-width: 0;
+}
+textarea { min-height: 84px; resize: vertical; line-height: 1.55; }
+input:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.check-field { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.check-field input { width: 20px; height: 20px; accent-color: var(--accent); }
+.edit-card { background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px; display: grid; gap: 10px; min-width: 0; }
+.edit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.edit-head .mono { color: var(--muted); font-size: 13px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row-type { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.mini-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.stack { display: grid; gap: 10px; }
+@media (max-width: 440px) { .row2 { grid-template-columns: 1fr; } }
+
+/* sheet */
+.overlay { position: fixed; inset: 0; background: var(--scrim); z-index: 20; }
+.sheet {
+  position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 21;
+  width: 100%; max-width: 640px; max-height: 88vh; overflow: auto;
+  background: var(--surface); border-radius: 18px 18px 0 0;
+  padding-top: 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  display: grid; gap: 12px;
+}
+.sheet h2 { font-size: 18px; }
+.preview { border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; }
+
+#toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 30;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100% - 32px); background: var(--ink); color: var(--paper);
+  padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 500;
+}
+.empty { color: var(--muted); font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { .pop { animation: none; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- helpers ----------
+  const STORE_KEY = 'oikake-list:v1';
+  const SAMPLE_ID = 'sample-hoshizora';
+  const MAX_ITEMS = 1000;
+  const LONG_CODE = 3000;
+  const $app = document.getElementById('app');
+  const $toast = document.getElementById('toast');
+
+  const pad2 = n => String(n).padStart(2, '0');
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+  const uid = p => p + Math.random().toString(36).slice(2, 10);
+  const str = v => (typeof v === 'string' ? v : v == null ? '' : String(v)).trim();
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const safeUrl = u => {
+    const s = str(u);
+    if (!s) return '';
+    try { const x = new URL(s); return (x.protocol === 'https:' || x.protocol === 'http:') ? x.href : ''; } catch (e) { return ''; }
+  };
+  const normDate = v => {
+    const m = str(v).match(/^(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?$/);
+    if (!m) return '';
+    const mo = Number(m[2]), d = Number(m[3]);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return '';
+    return `${m[1]}-${pad2(mo)}-${pad2(d)}`;
+  };
+  const fmtDate = d => (d ? d.replace(/-/g, '.') : '');
+  const clone = o => JSON.parse(JSON.stringify(o));
+
+  const CHECK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const DEFAULT_TYPES = [
+    { id: 'song', label: '曲' }, { id: 'story', label: 'ストーリー' }, { id: 'live', label: 'ライブ' },
+    { id: 'radio', label: 'ラジオ' }, { id: 'video', label: '動画' }, { id: 'other', label: 'その他' }
+  ];
+
+  // ---------- list format (version 1) ----------
+  // items keep a fixed id forever, so a renamed or reordered item keeps the user's check.
+  function sampleList() {
+    const items = [
+      ['s01', 'song', 'デビュー曲「はじまりの一番星」', '2023-04-01', 'https://example.com/', '最初に出た曲。ほしぞら組らしさがいちばんわかるので、まずはここから。', false],
+      ['s02', 'story', 'メインストーリー 第1章「出会い」', '2023-04-10', 'https://example.com/', '3人がユニットを組むまでの話。あとで出てくる用語の多くがここで登場する。', false],
+      ['s03', 'song', '「夜明けのリフレイン」', '2023-07-20', 'https://example.com/', '夏のイベント曲。ライブの定番になった。', false],
+      ['s04', 'radio', 'ラジオ 第1回', '2023-08-05', 'https://example.com/', '3人の素顔がわかる回。気軽に聴ける。', false],
+      ['s05', 'live', '1stライブ「ファーストライト」', '2023-10-14', 'https://example.com/', '円盤で見られる最初のライブ。コールの多くがこの日に生まれた。', false],
+      ['s06', 'story', 'メインストーリー 第2章「すれ違い」', '2024-01-15', 'https://example.com/', '第2章の終わりで、リーダーがユニットを抜けると言い出す。', true],
+      ['s07', 'song', '「ほうき星のうた」', '2024-03-03', 'https://example.com/', '第2章のあとに聴くと、歌詞の意味が変わる曲。', false],
+      ['s08', 'radio', 'ラジオ 1周年特別回', '2024-04-01', 'https://example.com/', '1年間を3人で振り返る回。', false],
+      ['s09', 'live', '2ndライブ「流星群」', '2024-09-21', 'https://example.com/', 'アンコールで第3章の発表と、新曲の初披露があった。', true],
+      ['s10', 'story', 'メインストーリー 第3章「約束の場所」', '2025-02-01', 'https://example.com/', '第2章のすれ違いに決着がつく。ここまで来たら追いついたと言っていい。', true]
+    ].map(([id, type, title, date, url, note, spoiler]) => ({ id, type, title, date, url, note, spoiler }));
+    return {
+      format: 'oikake-list', version: 1, id: SAMPLE_ID, sample: true,
+      title: 'ほしぞら組 追いつきリスト',
+      work: 'ほしぞら組（架空のアイドルユニット）',
+      author: 'サンプル作者',
+      checkedAt: '2026-10-26',
+      description: '使い方を試すための架空のサンプルです。実在の作品・団体とは関係ありません。',
+      unofficial: true,
+      reportUrl: '',
+      links: [{ label: '公式サイト（例）', url: 'https://example.com/' }],
+      types: [{ id: 'song', label: '曲' }, { id: 'story', label: 'ストーリー' }, { id: 'live', label: 'ライブ' }, { id: 'radio', label: 'ラジオ' }],
+      items,
+      routes: [{ id: 'main', label: '作者のおすすめ順', order: ['s01', 's02', 's03', 's05', 's04', 's06', 's07', 's08', 's09', 's10'] }],
+      terms: [
+        { id: 't1', word: '一番星', note: 'ほしぞら組のファンの呼び名。デビュー曲のタイトルから。', after: '' },
+        { id: 't2', word: '流れ星コール', note: 'ライブで「夜明けのリフレイン」の間奏に入れるお約束のコール。', after: 's05' },
+        { id: 't3', word: '約束の場所', note: '第3章のタイトルにもなった、3人が結成を決めた場所。', after: 's10' }
+      ]
+    };
+  }
+
+  function blankList() {
+    const first = { id: uid('i'), type: 'song', title: '', date: '', url: '', note: '', spoiler: false };
+    return {
+      format: 'oikake-list', version: 1, id: uid('l'),
+      title: '', work: '', author: '', checkedAt: today(), description: '', unofficial: true, reportUrl: '',
+      links: [], types: clone(DEFAULT_TYPES), items: [first],
+      routes: [{ id: 'main', label: '作者のおすすめ順', order: [first.id] }], terms: []
+    };
+  }
+
+  // Cleans any list that comes from outside (a share code, a backup, the editor).
+  function sanitizeList(raw) {
+    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.items)) throw new Error('リストの形になっていません。');
+    const seenT = new Set();
+    let types = (Array.isArray(raw.types) ? raw.types : []).map(t => ({ id: str(t && t.id) || uid('t'), label: str(t && t.label).slice(0, 20) }))
+      .filter(t => t.label && !seenT.has(t.id) && seenT.add(t.id));
+    if (!types.length) types = clone(DEFAULT_TYPES);
+    const typeIds = new Set(types.map(t => t.id));
+    const seenI = new Set();
+    const items = raw.items.slice(0, MAX_ITEMS).map(it => {
+      let id = str(it && it.id) || uid('i');
+      while (seenI.has(id)) id = uid('i');
+      seenI.add(id);
+      return {
+        id,
+        type: typeIds.has(str(it.type)) ? str(it.type) : types[0].id,
+        title: str(it.title).slice(0, 120),
+        date: normDate(it.date),
+        url: safeUrl(it.url),
+        note: str(it.note).slice(0, 800),
+        spoiler: !!it.spoiler
+      };
+    }).filter(it => it.title);
+    const itemIds = new Set(items.map(i => i.id));
+    const routes = (Array.isArray(raw.routes) ? raw.routes : []).map(r => ({
+      id: str(r && r.id) || uid('r'),
+      label: str(r && r.label).slice(0, 30) || '並び順',
+      order: (Array.isArray(r && r.order) ? r.order : []).map(str).filter(id => itemIds.has(id))
+    })).filter(r => r.id !== 'release');
+    if (!routes.length || routes[0].id !== 'main') routes.unshift({ id: 'main', label: '作者のおすすめ順', order: items.map(i => i.id) });
+    const terms = (Array.isArray(raw.terms) ? raw.terms : []).map(t => ({
+      id: str(t && t.id) || uid('w'),
+      word: str(t && t.word).slice(0, 40),
+      note: str(t && t.note).slice(0, 400),
+      after: itemIds.has(str(t && t.after)) ? str(t.after) : ''
+    })).filter(t => t.word);
+    const links = (Array.isArray(raw.links) ? raw.links : []).map(l => ({ label: str(l && l.label).slice(0, 40), url: safeUrl(l && l.url) }))
+      .filter(l => l.url).map(l => ({ label: l.label || l.url, url: l.url }));
+    return {
+      format: 'oikake-list', version: 1,
+      id: str(raw.id).slice(0, 40) || uid('l'),
+      sample: raw.id === SAMPLE_ID && !!raw.sample,
+      title: str(raw.title).slice(0, 80) || '名前のないリスト',
+      work: str(raw.work).slice(0, 80),
+      author: str(raw.author).slice(0, 40),
+      checkedAt: normDate(raw.checkedAt),
+      description: str(raw.description).slice(0, 600),
+      unofficial: raw.unofficial !== false,
+      reportUrl: safeUrl(raw.reportUrl),
+      links, types, items, routes, terms
+    };
+  }
+
+  // ---------- storage (this device only) ----------
+  let storageOk = true;
+  function initialState() {
+    const s = sampleList();
+    return { v: 1, order: [s.id], lists: { [s.id]: s }, progress: {} };
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return initialState();
+      const data = JSON.parse(raw);
+      const st = { v: 1, order: [], lists: {}, progress: {} };
+      for (const id of Array.isArray(data.order) ? data.order : []) {
+        if (!data.lists || !data.lists[id] || st.lists[id]) continue;
+        try { const l = sanitizeList(data.lists[id]); st.lists[l.id] = l; st.order.push(l.id); } catch (e) { /* skip a broken list */ }
+      }
+      for (const [id, p] of Object.entries(data.progress || {})) {
+        if (!st.lists[id] || !p) continue;
+        st.progress[id] = { checked: (p.checked && typeof p.checked === 'object') ? p.checked : {}, route: str(p.route) || 'main', filter: str(p.filter) || 'all' };
+      }
+      return st;
+    } catch (e) {
+      storageOk = false;
+      return initialState();
+    }
+  }
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); storageOk = true; }
+    catch (e) { storageOk = false; }
+  }
+  function prog(id) {
+    if (!state.progress[id]) state.progress[id] = { checked: {}, route: 'main', filter: 'all' };
+    return state.progress[id];
+  }
+
+  let state = load();
+  const ui = { view: 'home', listId: null, draft: null, draftIsNew: false, errors: [], confirm: null, modal: null, revealed: new Set(), popNext: false };
+
+  // ---------- routes and progress ----------
+  const byId = list => Object.fromEntries(list.items.map(i => [i.id, i]));
+  function routesOf(list) {
+    const rs = list.routes.map(r => ({ id: r.id, label: r.label }));
+    if (list.items.some(i => i.date)) rs.push({ id: 'release', label: '公開順' });
+    return rs;
+  }
+  function routeOrder(list, routeId) {
+    if (routeId === 'release') {
+      return list.items.map((it, idx) => ({ it, idx }))
+        .sort((a, b) => {
+          const da = a.it.date || '9999-99-99', db = b.it.date || '9999-99-99';
+          return da < db ? -1 : da > db ? 1 : a.idx - b.idx;
+        }).map(x => x.it.id);
+    }
+    const r = list.routes.find(x => x.id === routeId) || list.routes[0];
+    const order = r ? r.order.slice() : [];
+    const inRoute = new Set(order);
+    for (const it of list.items) if (!inRoute.has(it.id)) order.push(it.id);
+    return order;
+  }
+  function currentRoute(list, p) {
+    const ids = routesOf(list).map(r => r.id);
+    return ids.includes(p.route) ? p.route : 'main';
+  }
+  function visibleItems(list, p) {
+    const map = byId(list);
+    const filter = list.types.some(t => t.id === p.filter) ? p.filter : 'all';
+    return routeOrder(list, currentRoute(list, p)).map(id => map[id]).filter(it => it && (filter === 'all' || it.type === filter));
+  }
+  const typeLabel = (list, id) => (list.types.find(t => t.id === id) || { label: '' }).label;
+
+  // ---------- share codes ----------
+  function b64u(bytes) {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function unb64u(s) {
+    let t = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (t.length % 4) t += '=';
+    const bin = atob(t);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  async function encodeList(list) {
+    const copy = clone(list);
+    delete copy.sample;
+    const bytes = new TextEncoder().encode(JSON.stringify(copy));
+    if (typeof CompressionStream === 'function') {
+      try {
+        const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+        return 'z' + b64u(new Uint8Array(await new Response(stream).arrayBuffer()));
+      } catch (e) { /* fall back to plain */ }
+    }
+    return 'j' + b64u(bytes);
+  }
+  async function decodeAny(text) {
+    let s = str(text);
+    if (!s) throw new Error('コードが空です。');
+    if (s[0] === '{') return JSON.parse(s);
+    const m = s.match(/[#?&]list=([A-Za-z0-9_-]+)/);
+    if (m) s = m[1];
+    s = s.replace(/\s+/g, '');
+    const kind = s[0], body = s.slice(1);
+    if (!/^[A-Za-z0-9_-]+$/.test(body)) throw new Error('コードの文字が正しくありません。最後までコピーできているか確かめてください。');
+    const bytes = unb64u(body);
+    if (kind === 'z') {
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return JSON.parse(await new Response(stream).text());
+    }
+    if (kind === 'j') return JSON.parse(new TextDecoder().decode(bytes));
+    throw new Error('共有コードではないようです。');
+  }
+
+  // ---------- toast and copy ----------
+  let toastTimer = null;
+  function toast(msg) {
+    $toast.textContent = msg;
+    $toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { $toast.hidden = true; }, 2400);
+  }
+  function copyFrom(id) {
+    const ta = document.getElementById(id);
+    if (!ta) return;
+    const fallback = () => { ta.focus(); ta.select(); toast('選択しました。コピーしてください'); };
+    try {
+      navigator.clipboard.writeText(ta.value).then(() => toast('コピーしました'), fallback);
+    } catch (e) { fallback(); }
+  }
+
+  // ---------- views ----------
+  function storageNotice() {
+    return storageOk ? '' : '<p class="notice">この画面では記録を保存できません。閉じると記録が消えるので、「記録の保存」からコピーしておいてください。</p>';
+  }
+
+  function viewHome() {
+    const cards = state.order.filter(id => state.lists[id]).map(id => {
+      const l = state.lists[id];
+      const p = prog(id);
+      const total = l.items.length;
+      const done = l.items.filter(i => p.checked[i.id]).length;
+      const pct = total ? Math.round(done / total * 100) : 0;
+      return `<button class="list-card" data-action="open-list" data-id="${esc(id)}">
+        <span class="lc-work">${esc(l.work || '作品名なし')}${l.sample ? ' ・ サンプル' : ''}</span>
+        <span class="lc-title">${esc(l.title)}</span>
+        <span class="lc-meter"><span class="mini" aria-hidden="true"><span style="width:${pct}%"></span></span><span class="lc-pct">${pct}%</span></span>
+        <span class="hint">${done} / ${total} 項目</span>
+      </button>`;
+    }).join('');
+    return `<header class="bar"><div class="bar-in">
+        <span class="brand">追いつきリスト</span>
+        <button class="small-btn" data-action="open-backup">記録の保存</button>
+      </div></header>
+      <main class="wrap">
+        <section><p class="lead">長く続く作品を「何から・どの順で」追えばいいかをリストにして、チェックしながら進めるアプリです。</p></section>
+        ${storageNotice()}
+        <section>
+          <h2 class="label">マイリスト</h2>
+          <div class="cards">${cards || '<p class="empty">まだリストがありません。作るか、もらった共有コードから開いてください。</p>'}</div>
+        </section>
+        <div class="btn-row">
+          <button class="btn primary" data-action="new-list">リストを作る</button>
+          <button class="btn" data-action="open-import">共有リンクを貼って開く</button>
+        </div>
+        ${state.lists[SAMPLE_ID] ? '' : '<div><button class="btn ghost" data-action="restore-sample">架空のサンプルを戻す</button></div>'}
+        <p class="foot">サーバーは使っていません。リストとチェックの記録は、この端末のブラウザにだけ保存されます。ホーム画面に追加すると、アプリのように使えて記録も消えにくくなります。</p>
+      </main>`;
+  }
+
+  function noteBlock(list, p, it) {
+    if (!it.note) return '';
+    const open = !it.spoiler || p.checked[it.id] || ui.revealed.has('n:' + it.id);
+    if (open) return `<p class="note">${esc(it.note)}</p>`;
+    return `<div class="gate">まだ追っていない部分の説明なので、隠しています。<button class="small-btn" data-action="reveal" data-key="n:${esc(it.id)}">説明を見る</button></div>`;
+  }
+  function reportLink(list, it) {
+    if (!list.reportUrl) return '';
+    const href = safeUrl(list.reportUrl.split('{title}').join(encodeURIComponent(it.title)));
+    return href ? `<a href="${esc(href)}" target="_blank" rel="noopener">間違いを報告</a>` : '';
+  }
+
+  function viewList() {
+    const list = state.lists[ui.listId];
+    if (!list) { ui.view = 'home'; return viewHome(); }
+    const p = prog(list.id);
+    const route = currentRoute(list, p);
+    const routes = routesOf(list);
+    const routeLabel = (routes.find(r => r.id === route) || routes[0]).label;
+    const order = routeOrder(list, route);
+    const map = byId(list);
+    const total = list.items.length;
+    const done = list.items.filter(i => p.checked[i.id]).length;
+    const pct = total ? Math.round(done / total * 100) : 0;
+    const segs = order.map(id => `<span class="seg${p.checked[id] ? ' on' : ''}"></span>`).join('');
+    const typeProgress = list.types.map(t => {
+      const its = list.items.filter(i => i.type === t.id);
+      if (!its.length) return '';
+      return `<span>${esc(t.label)} <b>${its.filter(i => p.checked[i.id]).length}/${its.length}</b></span>`;
+    }).join('');
+
+    const visible = visibleItems(list, p);
+    const filter = list.types.some(t => t.id === p.filter) ? p.filter : 'all';
+    const pending = visible.filter(it => !p.checked[it.id]);
+    const nx = pending[0];
+    let nextHtml;
+    if (!total) {
+      nextHtml = '<p class="eyebrow">次はこれ</p><p>まだ項目がありません。「編集」から足してください。</p>';
+    } else if (!nx) {
+      nextHtml = filter === 'all'
+        ? '<p class="eyebrow">追いつきました</p><p class="next-title">このリストは全部チェックしました。</p>'
+        : `<p class="eyebrow">この入り口は完了</p><p class="next-title">「${esc(typeLabel(list, filter))}」は全部チェックしました。</p>`;
+    } else {
+      const pos = order.indexOf(nx.id) + 1;
+      const link = nx.url ? `<a class="btn" href="${esc(nx.url)}" target="_blank" rel="noopener">公式で見る ↗</a>` : '';
+      const then = pending.slice(1, 3).map(i => esc(i.title)).join(' ／ ');
+      nextHtml = `<p class="eyebrow">次はこれ</p>
+        <h2 class="next-title">${esc(nx.title)}</h2>
+        <p class="next-sub">${esc(typeLabel(list, nx.type))}${nx.date ? ' ・ <span class="mono">' + fmtDate(nx.date) + '</span>' : ''} ・ ${esc(routeLabel)}で${pos}番目</p>
+        ${noteBlock(list, p, nx)}
+        <div class="btn-row">${link}<button class="btn primary" data-action="check-next" data-id="${esc(nx.id)}">見た・聴いた</button></div>
+        ${then ? `<p class="then">そのあと：${then}</p>` : ''}`;
+    }
+
+    const routeBtns = routes.length > 1 ? `<div class="seg-ctl" role="group" aria-label="並び順">${routes.map(r =>
+      `<button data-action="set-route" data-id="${esc(r.id)}" aria-pressed="${r.id === route}">${esc(r.label)}</button>`).join('')}</div>` : '';
+    const usedTypes = list.types.filter(t => list.items.some(i => i.type === t.id));
+    const chips = usedTypes.length > 1 ? `<div class="chips" role="group" aria-label="入り口">
+        <button class="chip" data-action="set-filter" data-id="all" aria-pressed="${filter === 'all'}">すべて<span class="n">${total}</span></button>
+        ${usedTypes.map(t => `<button class="chip" data-action="set-filter" data-id="${esc(t.id)}" aria-pressed="${filter === t.id}">${esc(t.label)}から<span class="n">${list.items.filter(i => i.type === t.id).length}</span></button>`).join('')}
+      </div>` : '';
+
+    const rows = visible.map(it => {
+      const checked = !!p.checked[it.id];
+      const n = order.indexOf(it.id) + 1;
+      const link = it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">公式で見る ↗</a>` : '';
+      const report = reportLink(list, it);
+      return `<li class="item${checked ? ' done' : ''}">
+        <span class="num">${pad2(n)}</span>
+        <button class="check" data-action="toggle-check" data-id="${esc(it.id)}" aria-pressed="${checked}" aria-label="${esc(it.title)}を${checked ? '未チェックに戻す' : 'チェックする'}">${CHECK_SVG}</button>
+        <details>
+          <summary>
+            <span class="item-title">${esc(it.title)}</span>
+            <span class="sub"><span class="type-tag">${esc(typeLabel(list, it.type))}</span>${it.date ? `<span class="mono">${fmtDate(it.date)}</span>` : ''}${it.spoiler && !checked ? '<span class="warn-tag">ネタバレ注意</span>' : ''}${checked ? `<span>チェック済み <span class="mono">${fmtDate(p.checked[it.id])}</span></span>` : ''}</span>
+          </summary>
+          <div class="detail">
+            ${noteBlock(list, p, it)}
+            ${link || report ? `<div class="links-row">${link}${report}</div>` : ''}
+            ${!it.note && !link && !report ? '<p class="hint">説明はまだありません。</p>' : ''}
+          </div>
+        </details>
+      </li>`;
+    }).join('');
+
+    const terms = list.terms.length ? `<dl class="terms">${list.terms.map(t => {
+      const open = !t.after || p.checked[t.after] || ui.revealed.has('t:' + t.id);
+      const gateTitle = t.after && map[t.after] ? map[t.after].title : '';
+      return `<div><dt>${esc(t.word)}</dt><dd>${open ? esc(t.note) : `<span class="gate locked">${esc(gateTitle)} をチェックすると表示します。<button class="small-btn" data-action="reveal" data-key="t:${esc(t.id)}">今すぐ見る</button></span>`}</dd></div>`;
+    }).join('')}</dl>` : '<p class="empty">用語メモはまだありません。</p>';
+    const links = list.links.length ? `<ul class="plain-list">${list.links.map(l => `<li><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a></li>`).join('')}</ul>` : '<p class="empty">公式リンクはまだありません。</p>';
+    const armed = ui.confirm === 'list:' + list.id;
+
+    return `<header class="bar"><div class="bar-in">
+        <button class="back" data-action="go-home">← マイリスト</button>
+        <div class="bar-actions">
+          <button class="small-btn" data-action="open-share">共有</button>
+          <button class="small-btn" data-action="edit-list">編集</button>
+        </div>
+      </div></header>
+      <main class="wrap">
+        <section>
+          ${list.work ? `<p class="work">${esc(list.work)}</p>` : ''}
+          <h1 class="list-title">${esc(list.title)}</h1>
+          <p class="meta">${list.unofficial ? '<span class="badge">非公式</span>' : ''}${list.author ? `<span>作者：${esc(list.author)}</span>` : ''}${list.checkedAt ? `<span>最終確認：<span class="mono">${fmtDate(list.checkedAt)}</span></span>` : ''}</p>
+          ${list.sample ? '<p class="notice">これは使い方を試すための架空のサンプルです。自分のリストは、マイリストの「リストを作る」から作れます。</p>' : ''}
+          ${list.description && !list.sample ? `<p class="note">${esc(list.description)}</p>` : ''}
+          ${storageNotice()}
+        </section>
+        <section aria-label="追いつき度">
+          <div class="meter-top"><span class="pct">${pct}<small>%</small></span><span class="count mono">${done} / ${total} 項目</span></div>
+          <div class="segs${order.length > 60 ? ' dense' : ''}" aria-hidden="true">${segs}</div>
+          <div class="type-progress">${typeProgress}</div>
+        </section>
+        <section class="next${ui.popNext ? ' pop' : ''}" aria-live="polite">${nextHtml}</section>
+        ${routeBtns || chips ? `<section class="controls"><h2 class="label">並び順と入り口</h2>${routeBtns}${chips}</section>` : ''}
+        <section>
+          <ol class="items">${rows || '<li class="empty">この入り口の項目はありません。</li>'}</ol>
+          <p class="hint">項目をタップすると、説明と公式へのリンクが開きます。</p>
+        </section>
+        <section><h2 class="label">用語メモ</h2>${terms}</section>
+        <section><h2 class="label">公式リンク</h2>${links}</section>
+        <p class="disclaimer">${list.unofficial ? 'このリストは非公式のファンメイドで、公式とは関係ありません。' : ''}内容が正しいかは、各項目の公式ページで確かめてください。</p>
+        <div><button class="btn danger${armed ? ' armed' : ''}" data-action="delete-list">${armed ? 'もう一度押すと削除（記録も消えます）' : 'このリストを削除'}</button></div>
+      </main>`;
+  }
+
+  function opt(value, label, selected) {
+    return `<option value="${esc(value)}"${selected ? ' selected' : ''}>${esc(label)}</option>`;
+  }
+
+  function viewEdit() {
+    const d = ui.draft;
+    const errors = ui.errors.length ? `<div class="errors" id="edit-errors" role="alert">${ui.errors.map(e => `<p>${esc(e)}</p>`).join('')}</div>` : '';
+    const typeRows = d.types.map((t, i) => {
+      const used = d.items.some(it => it.type === t.id);
+      return `<div class="row-type">
+        <input type="text" id="type-${esc(t.id)}" data-bind="types.${i}.label" data-type-id="${esc(t.id)}" value="${esc(t.label)}" aria-label="種類の名前" maxlength="20">
+        <button class="small-btn" data-action="del-type" data-i="${i}" ${used || d.types.length < 2 ? 'disabled' : ''} title="${used ? '使っている項目があるので消せません' : ''}">削除</button>
+      </div>`;
+    }).join('');
+    const itemCards = d.items.map((it, i) => {
+      const armed = ui.confirm === 'item:' + it.id;
+      return `<div class="edit-card" id="card-${esc(it.id)}">
+        <div class="edit-head">
+          <span class="mono">${pad2(i + 1)}</span>
+          <div class="mini-btns">
+            <button class="small-btn" data-action="move-item" data-i="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="上へ">↑</button>
+            <button class="small-btn" data-action="move-item" data-i="${i}" data-dir="1" ${i === d.items.length - 1 ? 'disabled' : ''} aria-label="下へ">↓</button>
+            <button class="small-btn${armed ? ' primary' : ''}" data-action="del-item" data-i="${i}">${armed ? '削除する' : '削除'}</button>
+          </div>
+        </div>
+        <label class="field"><span>タイトル</span><input type="text" id="title-${esc(it.id)}" data-bind="items.${i}.title" data-item-id="${esc(it.id)}" value="${esc(it.title)}" maxlength="120" placeholder="例：1stライブ「〇〇」"></label>
+        <div class="row2">
+          <label class="field"><span>種類</span><select id="type-sel-${esc(it.id)}" data-bind="items.${i}.type">${d.types.map(t => opt(t.id, t.label, t.id === it.type)).join('')}</select></label>
+          <label class="field"><span>公開日（わかれば）</span><input type="date" id="date-${esc(it.id)}" data-bind="items.${i}.date" value="${esc(it.date)}"></label>
+        </div>
+        <label class="field"><span>公式ページのURL</span><input type="url" id="url-${esc(it.id)}" data-bind="items.${i}.url" value="${esc(it.url)}" placeholder="https://" inputmode="url"></label>
+        <label class="field"><span>短い説明（自分の言葉で）</span><textarea id="note-${esc(it.id)}" data-bind="items.${i}.note" maxlength="800">${esc(it.note)}</textarea></label>
+        <label class="check-field"><input type="checkbox" id="spoiler-${esc(it.id)}" data-bind="items.${i}.spoiler" ${it.spoiler ? 'checked' : ''}> 説明にネタバレを含む（チェックするまで隠す）</label>
+      </div>`;
+    }).join('');
+    const termCards = d.terms.map((t, i) => `<div class="edit-card">
+        <div class="edit-head"><span class="field-label">用語 ${i + 1}</span><button class="small-btn" data-action="del-term" data-i="${i}">削除</button></div>
+        <label class="field"><span>用語</span><input type="text" id="word-${esc(t.id)}" data-bind="terms.${i}.word" value="${esc(t.word)}" maxlength="40"></label>
+        <label class="field"><span>説明</span><textarea id="tnote-${esc(t.id)}" data-bind="terms.${i}.note" maxlength="400">${esc(t.note)}</textarea></label>
+        <label class="field"><span>表示するタイミング</span><select id="after-${esc(t.id)}" data-bind="terms.${i}.after">${opt('', 'いつでも表示', !t.after)}${d.items.map(it => opt(it.id, (it.title || '（タイトル未入力）') + ' のあと', t.after === it.id)).join('')}</select></label>
+      </div>`).join('');
+    const linkCards = d.links.map((l, i) => `<div class="edit-card">
+        <div class="edit-head"><span class="field-label">リンク ${i + 1}</span><button class="small-btn" data-action="del-link" data-i="${i}">削除</button></div>
+        <label class="field"><span>名前</span><input type="text" id="llabel-${i}" data-bind="links.${i}.label" value="${esc(l.label)}" maxlength="40" placeholder="例：公式サイト"></label>
+        <label class="field"><span>URL</span><input type="url" id="lurl-${i}" data-bind="links.${i}.url" value="${esc(l.url)}" placeholder="https://" inputmode="url"></label>
+      </div>`).join('');
+
+    return `<header class="bar"><div class="bar-in">
+        <button class="back" data-action="cancel-edit">キャンセル</button>
+        <div class="bar-actions"><button class="small-btn primary" data-action="save-edit">保存</button></div>
+      </div></header>
+      <main class="wrap">
+        <section><h1 class="list-title">${ui.draftIsNew ? 'リストを作る' : 'リストを編集'}</h1>${errors}</section>
+        <section class="stack">
+          <h2 class="label">基本の情報</h2>
+          <label class="field"><span>リストの名前</span><input type="text" id="f-title" data-bind="title" value="${esc(d.title)}" maxlength="80" placeholder="例：学マス 追いつきリスト"></label>
+          <label class="field"><span>作品名</span><input type="text" id="f-work" data-bind="work" value="${esc(d.work)}" maxlength="80" placeholder="例：学園アイドルマスター"></label>
+          <div class="row2">
+            <label class="field"><span>作者の名前</span><input type="text" id="f-author" data-bind="author" value="${esc(d.author)}" maxlength="40"></label>
+            <label class="field"><span>最終確認日</span><input type="date" id="f-checked" data-bind="checkedAt" value="${esc(d.checkedAt)}"></label>
+          </div>
+          <label class="field"><span>リストの説明</span><textarea id="f-desc" data-bind="description" maxlength="600" placeholder="どんな人向けの追い方か、など">${esc(d.description)}</textarea></label>
+          <label class="check-field"><input type="checkbox" id="f-unofficial" data-bind="unofficial" ${d.unofficial ? 'checked' : ''}> 非公式のリストとして表示する</label>
+        </section>
+        <section class="stack">
+          <h2 class="label">種類（入り口）</h2>
+          <p class="hint">リストの上で「曲から」「ストーリーから」のように絞り込むときに使います。</p>
+          ${typeRows}
+          <div><button class="small-btn" data-action="add-type">種類を足す</button></div>
+        </section>
+        <section class="stack">
+          <h2 class="label">項目（この順番が「作者のおすすめ順」になります）</h2>
+          ${itemCards}
+          <div><button class="btn" data-action="add-item">項目を足す</button></div>
+          <div class="edit-card">
+            <span class="field-label">まとめて足す</span>
+            <p class="hint">1行に1項目。「種類,タイトル,公開日,URL」の順にカンマで区切ります。タイトルだけの行でも大丈夫です。</p>
+            <textarea id="bulk-text" placeholder="曲,初めての曲,2024-05-16,https://...&#10;ライブ,1stライブ"></textarea>
+            <div><button class="small-btn" data-action="bulk-add">まとめて足す</button></div>
+          </div>
+        </section>
+        <section class="stack">
+          <h2 class="label">用語メモ</h2>
+          <p class="hint">「表示するタイミング」を選ぶと、その項目をチェックするまで説明が隠れます。</p>
+          ${termCards}
+          <div><button class="small-btn" data-action="add-term">用語を足す</button></div>
+        </section>
+        <section class="stack">
+          <h2 class="label">公式リンク</h2>
+          ${linkCards}
+          <div><button class="small-btn" data-action="add-link">リンクを足す</button></div>
+        </section>
+        <section class="stack">
+          <h2 class="label">間違いの報告先（なくても大丈夫）</h2>
+          <label class="field"><span>報告フォームのURL</span><input type="url" id="f-report" data-bind="reportUrl" value="${esc(d.reportUrl)}" placeholder="https://docs.google.com/forms/..." inputmode="url"></label>
+          <p class="hint">Googleフォームの事前入力リンクを入れると、各項目に「間違いを報告」が出ます。URLの中の {title} は項目のタイトルに置き換わります。</p>
+        </section>
+        <div class="btn-row"><button class="btn primary" data-action="save-edit">保存する</button><button class="btn" data-action="cancel-edit">キャンセル</button></div>
+      </main>`;
+  }
+
+  function viewBackup() {
+    const json = JSON.stringify(state);
+    return `<header class="bar"><div class="bar-in">
+        <button class="back" data-action="go-home">← マイリスト</button>
+      </div></header>
+      <main class="wrap">
+        <section><h1 class="list-title">記録の保存</h1>
+          <p class="lead">リストとチェックの記録は、この端末のブラウザにだけ保存されています。ときどきコピーして、メモアプリなどに貼っておくと安心です。</p>
+          <p class="notice">iPhoneのSafariは、しばらく開かないとサイトの保存データを消すことがあります。ホーム画面に追加して使うか、ときどきここで保存してください。</p>
+        </section>
+        <section>
+          <h2 class="label">ホーム画面に追加する</h2>
+          <p class="hint">iPhone：Safariの共有ボタンから「ホーム画面に追加」。Android：Chromeのメニューから「ホーム画面に追加」または「アプリをインストール」。</p>
+        </section>
+        <section>
+          <h2 class="label">コピーかファイルで保存</h2>
+          <textarea id="backup-out" readonly rows="5">${esc(json)}</textarea>
+          <div class="btn-row"><button class="btn primary" data-action="copy" data-target="backup-out">コピーする</button><button class="btn" data-action="download-backup">ファイルに保存</button></div>
+          <p class="hint mono">${json.length.toLocaleString('ja-JP')} 文字</p>
+        </section>
+        <section>
+          <h2 class="label">保存したものを読み込む</h2>
+          <p class="hint">同じリストがあるときは、チェックの記録を合わせます（消えません）。</p>
+          <textarea id="backup-in" rows="5" placeholder="コピーしておいた文字をここに貼り付け"></textarea>
+          <label class="field"><span>ファイルから読み込む</span><input type="file" id="backup-file" accept=".json,.txt,application/json,text/plain"></label>
+          <div class="btn-row"><button class="btn" data-action="restore">読み込む</button></div>
+        </section>
+      </main>`;
+  }
+
+  function viewModal() {
+    const m = ui.modal;
+    if (!m) return '';
+    let inner = '';
+    if (m.kind === 'share') {
+      const long = m.url && m.url.length > LONG_CODE;
+      const canShare = typeof navigator.share === 'function';
+      inner = `<h2 id="sheet-title">リストを共有</h2>
+        <p>このリンクを開いた人は、同じリストを自分のマイリストに入れられます。チェックの記録は送られません。</p>
+        ${m.url ? `<textarea id="share-url" readonly rows="4">${esc(m.url)}</textarea>
+          <p class="hint"><span class="mono">${m.url.length.toLocaleString('ja-JP')}</span> 文字${long ? '。長いので、SNSやメッセージアプリによっては途中で切れることがあります。' : ''}</p>
+          <div class="btn-row">${canShare ? '<button class="btn primary" data-action="native-share">送る</button>' : ''}<button class="btn${canShare ? '' : ' primary'}" data-action="copy" data-target="share-url">リンクをコピー</button><button class="btn" data-action="close-modal">閉じる</button></div>`
+        : '<p class="hint">リンクを作っています…</p>'}`;
+    } else if (m.kind === 'import') {
+      const pv = m.preview;
+      const exists = pv && state.lists[pv.id];
+      inner = `<h2 id="sheet-title">共有されたリスト</h2>
+        ${pv ? '' : `<label class="field"><span>もらったリンクを貼り付け</span><textarea id="import-text" rows="4">${esc(m.text || '')}</textarea></label>`}
+        ${m.error ? `<p class="errors">${esc(m.error)}</p>` : ''}
+        ${pv ? `<div class="preview">
+            <span class="lc-work">${esc(pv.work || '作品名なし')}</span>
+            <span class="lc-title">${esc(pv.title)}</span>
+            <span class="hint">${pv.items.length} 項目${pv.author ? ' ・ 作者：' + esc(pv.author) : ''}${pv.checkedAt ? ' ・ 最終確認：' + fmtDate(pv.checkedAt) : ''}</span>
+          </div>
+          <div class="btn-row"><button class="btn primary" data-action="save-import">${exists ? '新しい内容に更新して開く' : 'マイリストに入れて開く'}</button><button class="btn" data-action="close-modal">やめる</button></div>
+          ${exists ? '<p class="hint">同じリストがすでにあります。更新しても、チェックの記録はそのまま残ります。</p>' : ''}`
+        : `<div class="btn-row"><button class="btn primary" data-action="do-import">読み込む</button><button class="btn" data-action="close-modal">閉じる</button></div>`}`;
+    }
+    return `<div class="overlay" data-action="close-modal"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">${inner}</div>`;
+  }
+
+  function render() {
+    let html = '';
+    if (ui.view === 'list') html = viewList();
+    else if (ui.view === 'edit') html = viewEdit();
+    else if (ui.view === 'backup') html = viewBackup();
+    else html = viewHome();
+    $app.innerHTML = html + viewModal();
+    document.body.style.overflow = ui.modal ? 'hidden' : '';
+    ui.popNext = false;
+  }
+  function go(view, listId) {
+    ui.view = view;
+    if (listId !== undefined) ui.listId = listId;
+    ui.confirm = null;
+    ui.errors = [];
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- editing ----------
+  function setPath(obj, path, val) {
+    const keys = path.split('.');
+    let o = obj;
+    for (let i = 0; i < keys.length - 1; i++) { o = o[keys[i]]; if (o == null) return; }
+    o[keys[keys.length - 1]] = val;
+  }
+  function parseBulk(text, d) {
+    let added = 0;
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      if (d.items.length >= MAX_ITEMS) break;
+      const parts = line.split(/\t|,|，/).map(s => s.trim());
+      let label = '', title, date = '', url = '';
+      if (parts.length === 1) title = parts[0];
+      else [label, title, date = '', url = ''] = parts;
+      if (!title) continue;
+      let type = d.types[0].id;
+      if (label) {
+        let t = d.types.find(x => x.label === label);
+        if (!t) { t = { id: uid('t'), label: label.slice(0, 20) }; d.types.push(t); }
+        type = t.id;
+      }
+      d.items.push({ id: uid('i'), type, title: title.slice(0, 120), date: normDate(date), url: safeUrl(url), note: '', spoiler: false });
+      added++;
+    }
+    return added;
+  }
+  function commitDraft() {
+    const d = ui.draft;
+    const errs = [];
+    d.title = str(d.title);
+    if (!d.title) errs.push('リストの名前を入れてください。');
+    d.items = d.items.map(it => ({ ...it, title: str(it.title), url: str(it.url), note: str(it.note), date: normDate(it.date) })).filter(it => it.title);
+    if (!d.items.length) errs.push('項目を1つ以上入れてください（タイトルが空の項目は保存されません）。');
+    for (const it of d.items) if (it.url && !safeUrl(it.url)) errs.push(`「${it.title}」のURLが正しくありません。https:// から始まるURLを入れてください。`);
+    d.links = d.links.map(l => ({ label: str(l.label), url: str(l.url) })).filter(l => l.label || l.url);
+    for (const l of d.links) if (!safeUrl(l.url)) errs.push(`公式リンク「${l.label || l.url}」のURLが正しくありません。`);
+    if (str(d.reportUrl) && !safeUrl(d.reportUrl)) errs.push('報告フォームのURLが正しくありません。');
+    if (errs.length) {
+      ui.errors = errs;
+      render();
+      const el = document.getElementById('edit-errors');
+      if (el) el.scrollIntoView({ block: 'center' });
+      return false;
+    }
+    const ids = d.items.map(i => i.id);
+    d.routes = [{ id: 'main', label: (d.routes[0] && d.routes[0].label) || '作者のおすすめ順', order: ids }]
+      .concat(d.routes.slice(1).map(r => ({ ...r, order: r.order.filter(id => ids.includes(id)) })));
+    d.checkedAt = normDate(d.checkedAt) || today();
+    const clean = sanitizeList(d);
+    if (!state.lists[clean.id]) state.order.push(clean.id);
+    state.lists[clean.id] = clean;
+    save();
+    ui.draft = null;
+    go('list', clean.id);
+    toast('保存しました');
+    return true;
+  }
+
+  // ---------- actions ----------
+  const actions = {
+    'open-list': el => go('list', el.dataset.id),
+    'go-home': () => go('home'),
+    'open-backup': () => go('backup'),
+    'toggle-check': el => {
+      const p = prog(ui.listId);
+      const id = el.dataset.id;
+      if (p.checked[id]) delete p.checked[id]; else p.checked[id] = today();
+      save();
+      render();
+    },
+    'check-next': el => {
+      const list = state.lists[ui.listId];
+      const p = prog(ui.listId);
+      p.checked[el.dataset.id] = today();
+      save();
+      ui.popNext = true;
+      render();
+      if (list) toast('チェックしました');
+    },
+    'set-route': el => { prog(ui.listId).route = el.dataset.id; save(); render(); },
+    'set-filter': el => { prog(ui.listId).filter = el.dataset.id; save(); render(); },
+    'reveal': el => { ui.revealed.add(el.dataset.key); render(); },
+    'delete-list': () => {
+      const id = ui.listId;
+      if (ui.confirm !== 'list:' + id) { ui.confirm = 'list:' + id; render(); return; }
+      delete state.lists[id];
+      delete state.progress[id];
+      state.order = state.order.filter(x => x !== id);
+      save();
+      go('home');
+      toast('リストを削除しました');
+    },
+    'restore-sample': () => {
+      const s = sampleList();
+      state.lists[s.id] = s;
+      if (!state.order.includes(s.id)) state.order.push(s.id);
+      save();
+      render();
+    },
+    'new-list': () => { ui.draft = blankList(); ui.draftIsNew = true; go('edit'); },
+    'edit-list': () => { ui.draft = clone(state.lists[ui.listId]); ui.draftIsNew = false; go('edit'); },
+    'cancel-edit': () => {
+      const back = ui.draftIsNew || !state.lists[ui.listId] ? 'home' : 'list';
+      ui.draft = null;
+      go(back);
+    },
+    'save-edit': () => commitDraft(),
+    'add-item': () => {
+      const d = ui.draft;
+      const last = d.items[d.items.length - 1];
+      const it = { id: uid('i'), type: last ? last.type : d.types[0].id, title: '', date: '', url: '', note: '', spoiler: false };
+      d.items.push(it);
+      render();
+      const input = document.getElementById('title-' + it.id);
+      if (input) { input.scrollIntoView({ block: 'center' }); input.focus(); }
+    },
+    'move-item': el => {
+      const d = ui.draft;
+      const i = Number(el.dataset.i), j = i + Number(el.dataset.dir);
+      if (j < 0 || j >= d.items.length) return;
+      [d.items[i], d.items[j]] = [d.items[j], d.items[i]];
+      render();
+      const moved = document.getElementById('card-' + d.items[j].id);
+      if (moved) moved.scrollIntoView({ block: 'nearest' });
+    },
+    'del-item': el => {
+      const d = ui.draft;
+      const it = d.items[Number(el.dataset.i)];
+      if (!it) return;
+      if (ui.confirm !== 'item:' + it.id) { ui.confirm = 'item:' + it.id; render(); return; }
+      d.items.splice(Number(el.dataset.i), 1);
+      d.terms.forEach(t => { if (t.after === it.id) t.after = ''; });
+      ui.confirm = null;
+      render();
+    },
+    'add-type': () => { ui.draft.types.push({ id: uid('t'), label: '新しい種類' }); render(); },
+    'del-type': el => {
+      const d = ui.draft;
+      const t = d.types[Number(el.dataset.i)];
+      if (!t || d.items.some(it => it.type === t.id) || d.types.length < 2) return;
+      d.types.splice(Number(el.dataset.i), 1);
+      render();
+    },
+    'bulk-add': () => {
+      const ta = document.getElementById('bulk-text');
+      const n = parseBulk(ta ? ta.value : '', ui.draft);
+      // drop an untouched empty first row once real items arrive
+      ui.draft.items = ui.draft.items.filter((it, idx, arr) => it.title || arr.length === 1 || idx > 0 || str(it.note) || str(it.url));
+      render();
+      toast(n ? `${n}件足しました` : '足せる行がありませんでした');
+    },
+    'add-term': () => { ui.draft.terms.push({ id: uid('w'), word: '', note: '', after: '' }); render(); },
+    'del-term': el => { ui.draft.terms.splice(Number(el.dataset.i), 1); render(); },
+    'add-link': () => { ui.draft.links.push({ label: '', url: '' }); render(); },
+    'del-link': el => { ui.draft.links.splice(Number(el.dataset.i), 1); render(); },
+    'open-share': async () => {
+      const list = state.lists[ui.listId];
+      ui.modal = { kind: 'share', code: '' };
+      render();
+      try {
+        const code = await encodeList(list);
+        const url = `${location.origin}${location.pathname}#list=${code}`;
+        if (ui.modal && ui.modal.kind === 'share') { ui.modal.url = url; render(); }
+      } catch (e) {
+        ui.modal = null;
+        render();
+        toast('リンクを作れませんでした');
+      }
+    },
+    'native-share': async () => {
+      const list = state.lists[ui.listId];
+      if (!ui.modal || !ui.modal.url || !list) return;
+      try { await navigator.share({ title: list.title, text: `${list.title}（追いつきリスト）`, url: ui.modal.url }); }
+      catch (e) { /* the viewer closed the share menu */ }
+    },
+    'download-backup': () => {
+      try {
+        const blob = new Blob([JSON.stringify(state, null, 1)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `oikake-list-backup-${today()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        toast('ファイルに保存しました');
+      } catch (e) {
+        toast('ファイルに保存できませんでした。コピーで保存してください');
+      }
+    },
+    'open-import': () => { ui.modal = { kind: 'import', text: '', error: '', preview: null }; render(); const ta = document.getElementById('import-text'); if (ta) ta.focus(); },
+    'do-import': async () => {
+      const ta = document.getElementById('import-text');
+      const text = ta ? ta.value : '';
+      ui.modal.text = text;
+      try {
+        const raw = await decodeAny(text);
+        ui.modal.preview = sanitizeList(raw);
+        ui.modal.error = '';
+      } catch (e) {
+        ui.modal.preview = null;
+        ui.modal.error = (e && e.message && /[ぁ-んァ-ン一-龥]/.test(e.message)) ? e.message : 'リンクを読み込めませんでした。最後までコピーできているか確かめてください。';
+      }
+      render();
+    },
+    'save-import': () => {
+      const l = ui.modal && ui.modal.preview;
+      if (!l) return;
+      if (!state.lists[l.id]) state.order.push(l.id);
+      state.lists[l.id] = l;
+      save();
+      ui.modal = null;
+      go('list', l.id);
+      toast('マイリストに入れました');
+    },
+    'close-modal': () => { ui.modal = null; render(); },
+    'copy': el => copyFrom(el.dataset.target),
+    'restore': async () => {
+      const ta = document.getElementById('backup-in');
+      try {
+        const data = JSON.parse(str(ta && ta.value));
+        if (!data || typeof data !== 'object' || !data.lists) throw new Error('form');
+        let added = 0, updated = 0;
+        for (const id of Object.keys(data.lists)) {
+          const l = sanitizeList(data.lists[id]);
+          if (state.lists[l.id]) updated++; else { added++; state.order.push(l.id); }
+          state.lists[l.id] = l;
+          const theirs = data.progress && data.progress[id] && data.progress[id].checked;
+          if (theirs && typeof theirs === 'object') {
+            const mine = prog(l.id);
+            for (const [iid, day] of Object.entries(theirs)) if (!mine.checked[iid]) mine.checked[iid] = normDate(day) || today();
+          }
+        }
+        save();
+        go('home');
+        toast(`読み込みました（新しく${added}件・更新${updated}件）`);
+      } catch (e) {
+        toast('読み込めませんでした。コピーした文字を全部貼り付けてください');
+      }
+    }
+  };
+
+  $app.addEventListener('click', e => {
+    const el = e.target.closest('[data-action]');
+    if (!el || el.disabled) return;
+    const fn = actions[el.dataset.action];
+    if (!fn) return;
+    e.preventDefault();
+    fn(el, e);
+  });
+
+  // editor fields write straight into the draft; option labels follow the typing
+  $app.addEventListener('input', e => {
+    const el = e.target;
+    if (!ui.draft || !el.dataset || !el.dataset.bind) return;
+    setPath(ui.draft, el.dataset.bind, el.type === 'checkbox' ? el.checked : el.value);
+    if (el.dataset.itemId) {
+      document.querySelectorAll(`select[data-bind$=".after"] option[value="${CSS.escape(el.dataset.itemId)}"]`)
+        .forEach(o => { o.textContent = (el.value.trim() || '（タイトル未入力）') + ' のあと'; });
+    }
+    if (el.dataset.typeId) {
+      document.querySelectorAll(`select[data-bind$=".type"] option[value="${CSS.escape(el.dataset.typeId)}"]`)
+        .forEach(o => { o.textContent = el.value; });
+    }
+  });
+  $app.addEventListener('change', e => {
+    const el = e.target;
+    if (el.id === 'backup-file' && el.files && el.files[0]) {
+      const reader = new FileReader();
+      reader.onload = () => { const ta = document.getElementById('backup-in'); if (ta) ta.value = String(reader.result || ''); toast('ファイルを読み込みました。「読み込む」を押してください'); };
+      reader.readAsText(el.files[0]);
+      return;
+    }
+    if (ui.draft && el.dataset && el.dataset.bind) setPath(ui.draft, el.dataset.bind, el.type === 'checkbox' ? el.checked : el.value);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && ui.modal) { ui.modal = null; render(); }
+  });
+
+  // a shared link carries the list after #list=
+  async function openFromHash() {
+    const h = location.hash;
+    if (!h.startsWith('#list=')) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    ui.modal = { kind: 'import', text: '', error: '', preview: null };
+    try {
+      ui.modal.preview = sanitizeList(await decodeAny(h));
+    } catch (e) {
+      ui.modal.error = 'リンクを読み込めませんでした。リンクが最後までコピーされているか確かめてください。';
+    }
+    render();
+  }
+  window.addEventListener('hashchange', openFromHash);
+
+  render();
+  openFromHash();
+
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  }
+})();
+</script>
+</body>
+</html>
