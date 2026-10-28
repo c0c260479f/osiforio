@@ -769,8 +769,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
         <section><h1 class="list-title">${ui.draftIsNew ? 'リストを作る' : 'リストを編集'}</h1>${errors}</section>
         <section class="stack">
           <h2 class="label">基本の情報</h2>
-          <label class="field"><span>リストの名前</span><input type="text" id="f-title" data-bind="title" value="${esc(d.title)}" maxlength="80" placeholder="例：学マス 追いつきリスト"></label>
-          <label class="field"><span>作品名</span><input type="text" id="f-work" data-bind="work" value="${esc(d.work)}" maxlength="80" placeholder="例：学園アイドルマスター"></label>
+          <label class="field"><span>リストの名前</span><input type="text" id="f-title" data-bind="title" value="${esc(d.title)}" maxlength="80" placeholder="例：ほしぞら組 追いつきリスト"></label>
+          <label class="field"><span>作品名</span><input type="text" id="f-work" data-bind="work" value="${esc(d.work)}" maxlength="80" placeholder="例：ほしぞら組"></label>
           <div class="row2">
             <label class="field"><span>作者の名前</span><input type="text" id="f-author" data-bind="author" value="${esc(d.author)}" maxlength="40"></label>
             <label class="field"><span>最終確認日</span><input type="date" id="f-checked" data-bind="checkedAt" value="${esc(d.checkedAt)}"></label>
