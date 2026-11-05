@@ -57,8 +57,17 @@ def main():
         page.screenshot(path=str(SHOTS / "home.png"), full_page=True)
         check("home shows the sample list", page.locator(".list-card").count() == 1)
 
+        check("no in-app notice in a usual browser", page.locator(".in-app").count() == 0)
         page.click(".list-card")
         check("next is the first item", "はじまりの一番星" in page.inner_text(".next"))
+        steps = page.locator(".step-title").all_inner_texts()
+        check("sample shows the three steps", len(steps) == 3 and "まずこの1つ" in steps[0]
+              and "ここまで見れば話がわかる" in steps[1] and "もっと知りたくなったら" in steps[2], " / ".join(steps))
+        check("goal note after step 2", page.locator(".step").nth(1).locator(".step-goal").count() == 1)
+        check("link shows its site", page.locator(".items .host").first.text_content() == "example.com",
+              page.locator(".items .host").first.text_content())
+        check("next shows its site", "example.com" in page.inner_text(".next"))
+        check("version shown", "2026.11.05版" in page.inner_text(".meta"), page.inner_text(".meta"))
         page.click("[data-action=check-next]")
         page.wait_for_timeout(150)
         check("meter moves to 10%", page.inner_text(".pct").startswith("10"), page.inner_text(".pct"))
@@ -74,8 +83,9 @@ def main():
         check("release order", titles.index("ラジオ 第1回") < titles.index("1stライブ「ファーストライト」"))
         page.click(".seg-ctl button:has-text('作者のおすすめ順')")
 
-        page.locator(".item summary").nth(5).click()
-        check("spoiler note hidden", "隠しています" in page.locator(".item").nth(5).inner_text())
+        spoiler = page.locator(".item", has_text="第2章「すれ違い」")
+        spoiler.locator("summary").click()
+        check("spoiler note hidden", "隠しています" in spoiler.inner_text())
         check("glossary entry locked", "チェックすると表示" in page.inner_text(".terms"))
         page.screenshot(path=str(SHOTS / "list.png"), full_page=True)
         sw, cw = page.evaluate("[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
@@ -86,6 +96,7 @@ def main():
         page.wait_for_selector("#share-url", timeout=5000)
         link = page.input_value("#share-url")
         check("share link has the list", "#list=z" in link or "#list=j" in link, link[:60])
+        check("share link opens outside LINE", "?openExternalBrowser=1#list=" in link, link[:80])
         page.click(".sheet [data-action=close-modal]")
 
         # opening the link on another phone shows the list, ready to save
@@ -95,19 +106,23 @@ def main():
         p2.goto(link)
         p2.wait_for_selector(".preview", timeout=5000)
         check("link opens a preview", "ほしぞら組" in p2.inner_text(".preview"))
-        check("link is removed from the address", "#list=" not in p2.url)
+        check("link is removed from the address", "#list=" not in p2.url and "openExternalBrowser" not in p2.url, p2.url)
         p2.click("[data-action=save-import]")
         check("saved on the other phone", "0 / 10" in p2.inner_text(".count"), p2.inner_text(".count"))
         p2.screenshot(path=str(SHOTS / "opened-from-link.png"))
 
         # edit keeps checks
         page.click("[data-action=edit-list]")
+        check("editor keeps the step break", page.input_value("#f-goal") == "s06", page.input_value("#f-goal"))
         page.click("[data-action=add-item]")
         page.locator("input[id^=title-]").last.fill("3rdライブ「彗星」")
         sw, cw = page.evaluate("[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
         check("no sideways scroll in the editor", sw <= cw, f"{sw} > {cw}")
         page.locator("[data-action=save-edit]").first.click()
         check("item added, checks kept", "2 / 11" in page.inner_text(".count"), page.inner_text(".count"))
+        check("steps kept after editing", page.locator(".step").count() == 3)
+        today = page.evaluate("(() => { const d = new Date(); return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`; })()")
+        check("saving updates the version", f"{today}版" in page.inner_text(".meta"), page.inner_text(".meta"))
 
         # pasting the old link updates the list and keeps checks
         page.click("[data-action=go-home]")
@@ -160,6 +175,41 @@ def main():
         p4.goto(url)
         p4.click(".list-card")
         p4.screenshot(path=str(SHOTS / "list-dark.png"))
+
+        # reaching the break says the rest is optional
+        p5 = browser.new_context(**phone).new_page()
+        watch(p5, "goal: ")
+        p5.goto(url)
+        p5.click(".list-card")
+        for _ in range(5):
+            p5.click("[data-action=check-next]")
+            p5.wait_for_timeout(80)
+        check("goal reached message", "ここまでで話がわかります" in p5.inner_text(".next"), p5.inner_text(".next")[:60])
+        p5.screenshot(path=str(SHOTS / "goal-reached.png"), full_page=True)
+
+        # an older copy of the sample gets the steps, and its checks stay
+        p6 = browser.new_context(**phone).new_page()
+        watch(p6, "upgrade: ")
+        p6.goto(url)
+        p6.click(".list-card")
+        p6.click("[data-action=check-next]")  # saves the state once
+        p6.evaluate("""() => {
+            const st = JSON.parse(localStorage.getItem('oikake-list:v1'));
+            delete st.lists['sample-hoshizora'].goal;
+            localStorage.setItem('oikake-list:v1', JSON.stringify(st));
+        }""")
+        p6.goto(url)
+        p6.click(".list-card")
+        check("old sample gets the steps", p6.locator(".step").count() == 3)
+        check("old sample keeps checks", "1 / 10" in p6.inner_text(".count"), p6.inner_text(".count"))
+
+        # opened inside LINE's own browser: tell the viewer to switch
+        line = browser.new_context(**phone, user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari Line/14.2.0")
+        p7 = line.new_page()
+        watch(p7, "line: ")
+        p7.goto(link)
+        p7.wait_for_selector(".preview", timeout=5000)
+        check("in-app browser notice", p7.locator(".sheet .in-app").count() == 1)
 
         check("no script errors", not errors, "; ".join(errors[:5]))
         browser.close()

@@ -1,6 +1,6 @@
 // Keeps the app usable offline and lets it be added to the home screen.
 // Bump CACHE when index.html changes so phones pick up the new version.
-const CACHE = 'oikake-list-v1';
+const CACHE = 'oikake-list-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -29,13 +29,17 @@ self.addEventListener('fetch', event => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // fonts go straight to the network
 
-  // pages: try the network first so updates arrive, fall back to the saved copy offline
+  // pages: try the network first so updates arrive, fall back to the saved copy offline.
+  // Only the app page itself is saved, so opening test.html never replaces the offline copy.
   if (req.mode === 'navigate') {
+    const isApp = url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
     event.respondWith(
       fetch(req)
         .then(res => {
-          const copy = res.clone();
-          caches.open(CACHE).then(cache => cache.put('./index.html', copy));
+          if (isApp && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then(cache => cache.put('./index.html', copy));
+          }
           return res;
         })
         .catch(() => caches.match('./index.html'))

@@ -274,6 +274,17 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
   padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 500;
 }
 .empty { color: var(--muted); font-size: 14px; }
+
+/* steps of the recommending template: まずこの1つ → ここまで見れば話がわかる → もっと知りたくなったら */
+.steps { display: grid; gap: 22px; }
+.step { display: grid; gap: 8px; min-width: 0; }
+.step-title { display: flex; align-items: center; gap: 8px; font-size: 15.5px; font-weight: 700; line-height: 1.4; }
+.step-no {
+  flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--ink); color: var(--paper); font-family: var(--font-mono); font-size: 13px;
+}
+.step-goal { background: var(--accent-soft); color: var(--accent-ink); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; font-weight: 700; }
+.host { font-family: var(--font-mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .pop { animation: none; } }
 </style>
 </head>
@@ -303,6 +314,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
     if (!s) return '';
     try { const x = new URL(s); return (x.protocol === 'https:' || x.protocol === 'http:') ? x.href : ''; } catch (e) { return ''; }
   };
+  // the site a link goes to, shown beside it so a viewer can tell where it leads
+  const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+  // in-app browsers (LINE, Instagram, Facebook, TikTok, X) keep their own storage, apart from the usual browser
+  const IN_APP = /\bLine\/|FBAN|FBAV|FB_IAB|Instagram|BytedanceWebview|musical_ly|Twitter/i.test(navigator.userAgent || '');
   const normDate = v => {
     const m = str(v).match(/^(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?$/);
     if (!m) return '';
@@ -323,12 +338,12 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
   // items keep a fixed id forever, so a renamed or reordered item keeps the user's check.
   function sampleList() {
     const items = [
-      ['s01', 'song', 'デビュー曲「はじまりの一番星」', '2023-04-01', 'https://example.com/', '最初に出た曲。ほしぞら組らしさがいちばんわかるので、まずはここから。', false],
+      ['s01', 'song', 'デビュー曲「はじまりの一番星」', '2023-04-01', 'https://example.com/', '最初に出た曲。ほしぞら組らしさがいちばんわかるので、まずはこの1曲だけ聴いてみて。', false],
       ['s02', 'story', 'メインストーリー 第1章「出会い」', '2023-04-10', 'https://example.com/', '3人がユニットを組むまでの話。あとで出てくる用語の多くがここで登場する。', false],
       ['s03', 'song', '「夜明けのリフレイン」', '2023-07-20', 'https://example.com/', '夏のイベント曲。ライブの定番になった。', false],
-      ['s04', 'radio', 'ラジオ 第1回', '2023-08-05', 'https://example.com/', '3人の素顔がわかる回。気軽に聴ける。', false],
       ['s05', 'live', '1stライブ「ファーストライト」', '2023-10-14', 'https://example.com/', '円盤で見られる最初のライブ。コールの多くがこの日に生まれた。', false],
-      ['s06', 'story', 'メインストーリー 第2章「すれ違い」', '2024-01-15', 'https://example.com/', '第2章の終わりで、リーダーがユニットを抜けると言い出す。', true],
+      ['s06', 'story', 'メインストーリー 第2章「すれ違い」', '2024-01-15', 'https://example.com/', '第2章の終わりで、リーダーがユニットを抜けると言い出す。ここまで見れば、今のほしぞら組の話がわかる。', true],
+      ['s04', 'radio', 'ラジオ 第1回', '2023-08-05', 'https://example.com/', '3人の素顔がわかる回。気軽に聴ける。', false],
       ['s07', 'song', '「ほうき星のうた」', '2024-03-03', 'https://example.com/', '第2章のあとに聴くと、歌詞の意味が変わる曲。', false],
       ['s08', 'radio', 'ラジオ 1周年特別回', '2024-04-01', 'https://example.com/', '1年間を3人で振り返る回。', false],
       ['s09', 'live', '2ndライブ「流星群」', '2024-09-21', 'https://example.com/', 'アンコールで第3章の発表と、新曲の初披露があった。', true],
@@ -340,13 +355,16 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
       work: 'ほしぞら組（架空のアイドルユニット）',
       author: 'サンプル作者',
       checkedAt: '2026-10-26',
+      updatedAt: '2026-11-05',
       description: '使い方を試すための架空のサンプルです。実在の作品・団体とは関係ありません。',
       unofficial: true,
       reportUrl: '',
       links: [{ label: '公式サイト（例）', url: 'https://example.com/' }],
       types: [{ id: 'song', label: '曲' }, { id: 'story', label: 'ストーリー' }, { id: 'live', label: 'ライブ' }, { id: 'radio', label: 'ラジオ' }],
       items,
-      routes: [{ id: 'main', label: '作者のおすすめ順', order: ['s01', 's02', 's03', 's05', 's04', 's06', 's07', 's08', 's09', 's10'] }],
+      // the template: s01 first, s02–s06 make the story clear (goal), the rest is for when the viewer wants more
+      routes: [{ id: 'main', label: '作者のおすすめ順', order: ['s01', 's02', 's03', 's05', 's06', 's04', 's07', 's08', 's09', 's10'] }],
+      goal: 's06',
       terms: [
         { id: 't1', word: '一番星', note: 'ほしぞら組のファンの呼び名。デビュー曲のタイトルから。', after: '' },
         { id: 't2', word: '流れ星コール', note: 'ライブで「夜明けのリフレイン」の間奏に入れるお約束のコール。', after: 's05' },
@@ -361,7 +379,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
       format: 'oikake-list', version: 1, id: uid('l'),
       title: '', work: '', author: '', checkedAt: today(), description: '', unofficial: true, reportUrl: '',
       links: [], types: clone(DEFAULT_TYPES), items: [first],
-      routes: [{ id: 'main', label: '作者のおすすめ順', order: [first.id] }], terms: []
+      routes: [{ id: 'main', label: '作者のおすすめ順', order: [first.id] }], terms: [], goal: ''
     };
   }
 
@@ -411,10 +429,13 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
       work: str(raw.work).slice(0, 80),
       author: str(raw.author).slice(0, 40),
       checkedAt: normDate(raw.checkedAt),
+      updatedAt: normDate(raw.updatedAt),
       description: str(raw.description).slice(0, 600),
       unofficial: raw.unofficial !== false,
       reportUrl: safeUrl(raw.reportUrl),
-      links, types, items, routes, terms
+      links, types, items, routes, terms,
+      // the item where "ここまで見れば話がわかる" ends; empty = the list is shown without the three steps
+      goal: itemIds.has(str(raw.goal)) ? str(raw.goal) : ''
     };
   }
 
@@ -438,6 +459,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
         if (!st.lists[id] || !p) continue;
         st.progress[id] = { checked: (p.checked && typeof p.checked === 'object') ? p.checked : {}, route: str(p.route) || 'main', filter: str(p.filter) || 'all' };
       }
+      // an older copy of the sample (before the three steps) is replaced; item ids stay, so checks stay
+      const old = st.lists[SAMPLE_ID];
+      if (old && old.sample && !old.goal) st.lists[SAMPLE_ID] = sampleList();
       return st;
     } catch (e) {
       storageOk = false;
@@ -553,6 +577,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
   function storageNotice() {
     return storageOk ? '' : '<p class="notice">この画面では記録を保存できません。閉じると記録が消えるので、「記録の保存」からコピーしておいてください。</p>';
   }
+  function inAppNotice() {
+    return IN_APP ? '<p class="notice in-app">アプリの中のブラウザで開いています。ここで保存すると、ふだん使うブラウザとは別の場所に記録が残ることがあります。メニューから「ブラウザで開く」を選んでから使ってください。</p>' : '';
+  }
 
   function viewHome() {
     const cards = state.order.filter(id => state.lists[id]).map(id => {
@@ -574,6 +601,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
       </div></header>
       <main class="wrap">
         <section><p class="lead">長く続く作品を「何から・どの順で」追えばいいかをリストにして、チェックしながら進めるアプリです。</p></section>
+        ${inAppNotice()}
         ${storageNotice()}
         <section>
           <h2 class="label">マイリスト</h2>
@@ -621,6 +649,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
 
     const visible = visibleItems(list, p);
     const filter = list.types.some(t => t.id === p.filter) ? p.filter : 'all';
+    // the three steps show on the author's order with every item visible
+    const mainOrder = routeOrder(list, 'main');
+    const goalIdx = list.goal ? mainOrder.indexOf(list.goal) : -1;
+    const goalReached = goalIdx >= 0 && mainOrder.slice(0, goalIdx + 1).every(id => p.checked[id]);
+    const stepped = goalIdx >= 0 && route === 'main' && filter === 'all';
     const pending = visible.filter(it => !p.checked[it.id]);
     const nx = pending[0];
     let nextHtml;
@@ -634,11 +667,14 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
       const pos = order.indexOf(nx.id) + 1;
       const link = nx.url ? `<a class="btn" href="${esc(nx.url)}" target="_blank" rel="noopener">公式で見る ↗</a>` : '';
       const then = pending.slice(1, 3).map(i => esc(i.title)).join(' ／ ');
-      nextHtml = `<p class="eyebrow">次はこれ</p>
+      const past = stepped && goalReached;
+      nextHtml = `<p class="eyebrow">${past ? 'ここまでで話がわかります' : '次はこれ'}</p>
+        ${past ? '<p class="hint">この先は、気になったものだけで大丈夫です。次のおすすめはこれです。</p>' : ''}
         <h2 class="next-title">${esc(nx.title)}</h2>
         <p class="next-sub">${esc(typeLabel(list, nx.type))}${nx.date ? ' ・ <span class="mono">' + fmtDate(nx.date) + '</span>' : ''} ・ ${esc(routeLabel)}で${pos}番目</p>
         ${noteBlock(list, p, nx)}
         <div class="btn-row">${link}<button class="btn primary" data-action="check-next" data-id="${esc(nx.id)}">見た・聴いた</button></div>
+        ${nx.url ? `<p class="hint">リンク先：<span class="host">${esc(host(nx.url))}</span></p>` : ''}
         ${then ? `<p class="then">そのあと：${then}</p>` : ''}`;
     }
 
@@ -650,10 +686,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
         ${usedTypes.map(t => `<button class="chip" data-action="set-filter" data-id="${esc(t.id)}" aria-pressed="${filter === t.id}">${esc(t.label)}から<span class="n">${list.items.filter(i => i.type === t.id).length}</span></button>`).join('')}
       </div>` : '';
 
-    const rows = visible.map(it => {
+    const rowHtml = it => {
       const checked = !!p.checked[it.id];
       const n = order.indexOf(it.id) + 1;
-      const link = it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">公式で見る ↗</a>` : '';
+      const link = it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">公式で見る ↗</a><span class="host">${esc(host(it.url))}</span>` : '';
       const report = reportLink(list, it);
       return `<li class="item${checked ? ' done' : ''}">
         <span class="num">${pad2(n)}</span>
@@ -670,14 +706,38 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
           </div>
         </details>
       </li>`;
-    }).join('');
+    };
+    let itemsHtml;
+    if (stepped) {
+      const groups = [
+        { title: 'まずこの1つ', items: visible.slice(0, 1) },
+        { title: 'ここまで見れば話がわかる', items: visible.slice(1, goalIdx + 1) },
+        { title: 'もっと知りたくなったら', items: visible.slice(goalIdx + 1) }
+      ];
+      const goalNote = '<p class="step-goal">ここまで見れば、話がわかります。この先は、全部やらなくて大丈夫です。</p>';
+      const entries = usedTypes.length > 1 ? usedTypes.map(t => `「${esc(t.label)}から」`).join('') : '';
+      let no = 0;
+      itemsHtml = `<div class="steps">${groups.map((g, gi) => {
+        if (!g.items.length) return '';
+        no++;
+        const endsAtGoal = gi === 1 || (gi === 0 && goalIdx === 0);
+        return `<div class="step">
+          <h3 class="step-title"><span class="step-no">${no}</span>${g.title}</h3>
+          ${gi === 2 && entries ? `<p class="hint">上の${entries}で、気になる入り口から選べます。</p>` : ''}
+          <ol class="items">${g.items.map(rowHtml).join('')}</ol>
+          ${endsAtGoal ? goalNote : ''}
+        </div>`;
+      }).join('')}</div>`;
+    } else {
+      itemsHtml = `<ol class="items">${visible.map(rowHtml).join('') || '<li class="empty">この入り口の項目はありません。</li>'}</ol>`;
+    }
 
     const terms = list.terms.length ? `<dl class="terms">${list.terms.map(t => {
       const open = !t.after || p.checked[t.after] || ui.revealed.has('t:' + t.id);
       const gateTitle = t.after && map[t.after] ? map[t.after].title : '';
       return `<div><dt>${esc(t.word)}</dt><dd>${open ? esc(t.note) : `<span class="gate locked">${esc(gateTitle)} をチェックすると表示します。<button class="small-btn" data-action="reveal" data-key="t:${esc(t.id)}">今すぐ見る</button></span>`}</dd></div>`;
     }).join('')}</dl>` : '<p class="empty">用語メモはまだありません。</p>';
-    const links = list.links.length ? `<ul class="plain-list">${list.links.map(l => `<li><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a></li>`).join('')}</ul>` : '<p class="empty">公式リンクはまだありません。</p>';
+    const links = list.links.length ? `<ul class="plain-list">${list.links.map(l => `<li><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a> <span class="host">${esc(host(l.url))}</span></li>`).join('')}</ul>` : '<p class="empty">公式リンクはまだありません。</p>';
     const armed = ui.confirm === 'list:' + list.id;
 
     return `<header class="bar"><div class="bar-in">
@@ -691,9 +751,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
         <section>
           ${list.work ? `<p class="work">${esc(list.work)}</p>` : ''}
           <h1 class="list-title">${esc(list.title)}</h1>
-          <p class="meta">${list.unofficial ? '<span class="badge">非公式</span>' : ''}${list.author ? `<span>作者：${esc(list.author)}</span>` : ''}${list.checkedAt ? `<span>最終確認：<span class="mono">${fmtDate(list.checkedAt)}</span></span>` : ''}</p>
-          ${list.sample ? '<p class="notice">これは使い方を試すための架空のサンプルです。自分のリストは、マイリストの「リストを作る」から作れます。</p>' : ''}
+          <p class="meta">${list.unofficial ? '<span class="badge">非公式</span>' : ''}${list.author ? `<span>作者：${esc(list.author)}</span>` : ''}${list.updatedAt ? `<span><span class="mono">${fmtDate(list.updatedAt)}</span>版</span>` : ''}${list.checkedAt ? `<span>最終確認：<span class="mono">${fmtDate(list.checkedAt)}</span></span>` : ''}</p>
+          ${list.sample ? '<p class="notice">これは使い方を試すための架空のサンプルです。「まずこの1つ → ここまで見れば話がわかる → もっと知りたくなったら」の3段で作ってあります。自分のリストは、マイリストの「リストを作る」から作れます。</p>' : ''}
           ${list.description && !list.sample ? `<p class="note">${esc(list.description)}</p>` : ''}
+          ${inAppNotice()}
           ${storageNotice()}
         </section>
         <section aria-label="追いつき度">
@@ -704,7 +765,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
         <section class="next${ui.popNext ? ' pop' : ''}" aria-live="polite">${nextHtml}</section>
         ${routeBtns || chips ? `<section class="controls"><h2 class="label">並び順と入り口</h2>${routeBtns}${chips}</section>` : ''}
         <section>
-          <ol class="items">${rows || '<li class="empty">この入り口の項目はありません。</li>'}</ol>
+          ${itemsHtml}
           <p class="hint">項目をタップすると、説明と公式へのリンクが開きます。</p>
         </section>
         <section><h2 class="label">用語メモ</h2>${terms}</section>
@@ -794,6 +855,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
             <textarea id="bulk-text" placeholder="曲,初めての曲,2024-05-16,https://...&#10;ライブ,1stライブ"></textarea>
             <div><button class="small-btn" data-action="bulk-add">まとめて足す</button></div>
           </div>
+          <div class="edit-card">
+            <span class="field-label">布教の型（なくても大丈夫）</span>
+            <label class="field"><span>「ここまで見れば話がわかる」の区切り</span><select id="f-goal" data-bind="goal"><option value=""${d.goal ? '' : ' selected'}>区切りなし</option>${d.items.map((it, i) => `<option value="${esc(it.id)}" data-n="${pad2(i + 1)}"${d.goal === it.id ? ' selected' : ''}>${pad2(i + 1)} ${esc(it.title || '（タイトル未入力）')} まで</option>`).join('')}</select></label>
+            <p class="hint">区切りを選ぶと、1番目が「まずこの1つ」、区切りまでが「ここまで見れば話がわかる」、残りが「もっと知りたくなったら」に分かれて表示されます。3〜5番目あたりがおすすめです。</p>
+          </div>
         </section>
         <section class="stack">
           <h2 class="label">用語メモ</h2>
@@ -862,15 +928,16 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
       const pv = m.preview;
       const exists = pv && state.lists[pv.id];
       inner = `<h2 id="sheet-title">共有されたリスト</h2>
+        ${inAppNotice()}
         ${pv ? '' : `<label class="field"><span>もらったリンクを貼り付け</span><textarea id="import-text" rows="4">${esc(m.text || '')}</textarea></label>`}
         ${m.error ? `<p class="errors">${esc(m.error)}</p>` : ''}
         ${pv ? `<div class="preview">
             <span class="lc-work">${esc(pv.work || '作品名なし')}</span>
             <span class="lc-title">${esc(pv.title)}</span>
-            <span class="hint">${pv.items.length} 項目${pv.author ? ' ・ 作者：' + esc(pv.author) : ''}${pv.checkedAt ? ' ・ 最終確認：' + fmtDate(pv.checkedAt) : ''}</span>
+            <span class="hint">${pv.items.length} 項目${pv.author ? ' ・ 作者：' + esc(pv.author) : ''}${pv.updatedAt ? ' ・ ' + fmtDate(pv.updatedAt) + '版' : ''}${pv.checkedAt ? ' ・ 最終確認：' + fmtDate(pv.checkedAt) : ''}</span>
           </div>
           <div class="btn-row"><button class="btn primary" data-action="save-import">${exists ? '新しい内容に更新して開く' : 'マイリストに入れて開く'}</button><button class="btn" data-action="close-modal">やめる</button></div>
-          ${exists ? '<p class="hint">同じリストがすでにあります。更新しても、チェックの記録はそのまま残ります。</p>' : ''}`
+          ${exists ? `<p class="hint">同じリストがすでにあります${exists.updatedAt ? `（手元にあるのは${fmtDate(exists.updatedAt)}版）` : ''}。更新しても、チェックの記録はそのまま残ります。</p>` : ''}`
         : `<div class="btn-row"><button class="btn primary" data-action="do-import">読み込む</button><button class="btn" data-action="close-modal">閉じる</button></div>`}`;
     }
     return `<div class="overlay" data-action="close-modal"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">${inner}</div>`;
@@ -945,6 +1012,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
     d.routes = [{ id: 'main', label: (d.routes[0] && d.routes[0].label) || '作者のおすすめ順', order: ids }]
       .concat(d.routes.slice(1).map(r => ({ ...r, order: r.order.filter(id => ids.includes(id)) })));
     d.checkedAt = normDate(d.checkedAt) || today();
+    d.updatedAt = today();
     const clean = sanitizeList(d);
     if (!state.lists[clean.id]) state.order.push(clean.id);
     state.lists[clean.id] = clean;
@@ -1029,6 +1097,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
       if (ui.confirm !== 'item:' + it.id) { ui.confirm = 'item:' + it.id; render(); return; }
       d.items.splice(Number(el.dataset.i), 1);
       d.terms.forEach(t => { if (t.after === it.id) t.after = ''; });
+      if (d.goal === it.id) d.goal = '';
       ui.confirm = null;
       render();
     },
@@ -1058,7 +1127,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
       render();
       try {
         const code = await encodeList(list);
-        const url = `${location.origin}${location.pathname}#list=${code}`;
+        // openExternalBrowser=1 makes LINE open the link in the usual browser, where the checks are kept
+        const url = `${location.origin}${location.pathname}?openExternalBrowser=1#list=${code}`;
         if (ui.modal && ui.modal.kind === 'share') { ui.modal.url = url; render(); }
       } catch (e) {
         ui.modal = null;
@@ -1156,6 +1226,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
     if (el.dataset.itemId) {
       document.querySelectorAll(`select[data-bind$=".after"] option[value="${CSS.escape(el.dataset.itemId)}"]`)
         .forEach(o => { o.textContent = (el.value.trim() || '（タイトル未入力）') + ' のあと'; });
+      const goalOpt = document.querySelector(`#f-goal option[value="${CSS.escape(el.dataset.itemId)}"]`);
+      if (goalOpt) goalOpt.textContent = `${goalOpt.dataset.n} ${el.value.trim() || '（タイトル未入力）'} まで`;
     }
     if (el.dataset.typeId) {
       document.querySelectorAll(`select[data-bind$=".type"] option[value="${CSS.escape(el.dataset.typeId)}"]`)
@@ -1180,7 +1252,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
   async function openFromHash() {
     const h = location.hash;
     if (!h.startsWith('#list=')) return;
-    history.replaceState(null, '', location.pathname + location.search);
+    history.replaceState(null, '', location.pathname);
     ui.modal = { kind: 'import', text: '', error: '', preview: null };
     try {
       ui.modal.preview = sanitizeList(await decodeAny(h));
