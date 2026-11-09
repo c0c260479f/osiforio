@@ -4,6 +4,7 @@ Run from the repository root:
     pip install playwright && python -m playwright install chromium
     python tests/smoke_test.py
 """
+import base64
 import functools
 import http.server
 import json
@@ -114,6 +115,13 @@ def main():
         # edit keeps checks
         page.click("[data-action=edit-list]")
         check("editor keeps the step break", page.input_value("#f-goal") == "s06", page.input_value("#f-goal"))
+        rules = page.inner_text("#edit-rules")
+        check("editor lists what not to write", "歌詞" in rules and "攻略" in rules and "ネタバレ" in rules)
+        check("no switch to drop the 非公式 label", page.locator("#f-unofficial").count() == 0)
+        heads = page.locator(".edit-step").all_inner_texts()
+        check("editor shows the three steps among the items", len(heads) == 3 and "まずこの1つ" in heads[0]
+              and "ここまで見れば話がわかる" in heads[1] and "もっと知りたくなったら" in heads[2], " / ".join(heads))
+        page.screenshot(path=str(SHOTS / "edit-steps.png"), full_page=True)
         page.click("[data-action=add-item]")
         page.locator("input[id^=title-]").last.fill("3rdライブ「彗星」")
         sw, cw = page.evaluate("[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
@@ -148,9 +156,13 @@ def main():
         page.fill("#bulk-text", "曲,一曲目,2024/5/16,https://example.com/a\nライブ,ライブ1\nタイトルだけ\nラジオ,番組,2024-13-40,javascript:alert(1)")
         page.click("[data-action=bulk-add]")
         check("pasted lines become items", page.locator("input[id^=title-]").count() == 4)
+        report = page.inner_text("#bulk-report")
+        check("paste report names the fixed line", "4件足しました" in report and "4行目" in report
+              and "日付" in report and "URL" in report, report[:160])
         page.locator("[data-action=save-edit]").first.click()
         check("new list saved", "テスト用リスト" in page.inner_text("h1"))
         check("unsafe link dropped", page.locator(".items a[href^='javascript']").count() == 0)
+        check("saved list is marked 非公式", "非公式" in page.inner_text(".meta"), page.inner_text(".meta"))
 
         # backup round trip
         page.click("[data-action=go-home]")
@@ -210,6 +222,52 @@ def main():
         p7.goto(link)
         p7.wait_for_selector(".preview", timeout=5000)
         check("in-app browser notice", p7.locator(".sheet .in-app").count() == 1)
+
+        # pasting from an article: numbers and bullets go, a URL and a date are read anywhere, commas stay in titles
+        p8 = browser.new_context(**phone).new_page()
+        watch(p8, "paste: ")
+        p8.goto(url)
+        p8.click("[data-action=new-list]")
+        p8.fill("#f-title", "貼り付けのテスト")
+        p8.fill("#bulk-text", "1. Hello, world 2024年5月16日 https://example.com/b\n"
+                              "・２ndライブ（夜） ２０２４／５／１６\n2024年5月16日の生配信\n曲,,\nRe:ステージ 2024-02-31")
+        p8.click("[data-action=bulk-add]")
+        values = lambda sel: p8.locator(sel).evaluate_all("els => els.map(e => e.value)")
+        titles8, dates8, urls8 = values("input[id^=title-]"), values("input[id^=date-]"), values("input[id^=url-]")
+        check("paste keeps commas and drops numbers",
+              titles8 == ["Hello, world", "２ndライブ（夜）", "2024年5月16日の生配信", "Re:ステージ"], " / ".join(titles8))
+        check("paste reads dates anywhere, only real days", dates8 == ["2024-05-16", "2024-05-16", "", ""], " / ".join(dates8))
+        check("paste reads a URL anywhere", urls8[:1] == ["https://example.com/b"], " / ".join(urls8))
+        report8 = p8.inner_text("#bulk-report")
+        check("paste report lists skipped and fixed lines", "4行目" in report8 and "5行目" in report8, report8[:160])
+        p8.screenshot(path=str(SHOTS / "edit-paste.png"), full_page=True)
+
+        # the break can be set on an item, and the step headings follow it
+        p8.locator("[data-action=set-goal]").nth(2).click()
+        check("ここで区切る sets the break", p8.input_value("#f-goal") != "" and p8.locator(".edit-card.is-goal").count() == 1,
+              p8.input_value("#f-goal"))
+        check("steps follow the break", p8.locator(".edit-step").count() == 3)
+
+        # a wrong URL is marked on its field, and the error message jumps to it
+        p8.locator("input[id^=url-]").first.fill("abc")
+        p8.locator("[data-action=save-edit]").first.click()
+        check("wrong URL is marked", p8.locator("input[aria-invalid=true]").count() == 1)
+        p8.click(".err-link")
+        marked = p8.locator("input[aria-invalid=true]").first.get_attribute("id")
+        check("error jumps to its field", p8.evaluate("document.activeElement.id") == marked, marked)
+
+        # a list that calls itself official is still shown as 非公式
+        claim = json.dumps({"format": "oikake-list", "version": 1, "id": "claims-official", "title": "公式を名乗るリスト",
+                            "unofficial": False, "types": [{"id": "song", "label": "曲"}],
+                            "items": [{"id": "x1", "type": "song", "title": "一曲目"}],
+                            "routes": [{"id": "main", "label": "作者のおすすめ順", "order": ["x1"]}]}, ensure_ascii=False)
+        code = "j" + base64.urlsafe_b64encode(claim.encode()).decode().rstrip("=")
+        p9 = browser.new_context(**phone).new_page()
+        watch(p9, "official: ")
+        p9.goto(url + "#list=" + code)
+        p9.wait_for_selector(".preview", timeout=5000)
+        p9.click("[data-action=save-import]")
+        check("a list cannot drop the 非公式 label", "非公式" in p9.inner_text(".meta"), p9.inner_text(".meta"))
 
         check("no script errors", not errors, "; ".join(errors[:5]))
         browser.close()

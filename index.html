@@ -284,6 +284,18 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
   background: var(--ink); color: var(--paper); font-family: var(--font-mono); font-size: 13px;
 }
 .step-goal { background: var(--accent-soft); color: var(--accent-ink); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; font-weight: 700; }
+
+/* editor: what not to write, the steps inside the item list, the paste report, marked fields */
+.rules { border: 1.5px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; display: grid; gap: 6px; }
+.rules-title { font-size: 14px; font-weight: 700; }
+.rules ul, .bulk-report ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 13.5px; }
+.edit-step { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 700; line-height: 1.4; margin-top: 6px; }
+.edit-card.is-goal { border-color: var(--accent); }
+.edit-goal-note { font-size: 13px; font-weight: 700; color: var(--accent-ink); }
+.bulk-report { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; display: grid; gap: 6px; overflow-wrap: anywhere; }
+input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 3px var(--warn-soft); }
+.err-link { all: unset; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.err-link:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; border-radius: 4px; }
 .host { font-family: var(--font-mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .pop { animation: none; } }
 </style>
@@ -321,10 +333,14 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
   const normDate = v => {
     const m = str(v).match(/^(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?$/);
     if (!m) return '';
-    const mo = Number(m[2]), d = Number(m[3]);
-    if (mo < 1 || mo > 12 || d < 1 || d > 31) return '';
+    const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+    // only real calendar days pass: 2024-02-31 or 2024-13-01 are rejected
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return '';
     return `${m[1]}-${pad2(mo)}-${pad2(d)}`;
   };
+  // full-width digits and date marks, as typed on a Japanese keyboard, become half-width
+  const toHalf = s => s.replace(/[０-９／－．]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
   const fmtDate = d => (d ? d.replace(/-/g, '.') : '');
   const clone = o => JSON.parse(JSON.stringify(o));
 
@@ -431,7 +447,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
       checkedAt: normDate(raw.checkedAt),
       updatedAt: normDate(raw.updatedAt),
       description: str(raw.description).slice(0, 600),
-      unofficial: raw.unofficial !== false,
+      unofficial: true, // every list here is fan-made, so the 非公式 label cannot be turned off
       reportUrl: safeUrl(raw.reportUrl),
       links, types, items, routes, terms,
       // the item where "ここまで見れば話がわかる" ends; empty = the list is shown without the three steps
@@ -478,7 +494,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
   }
 
   let state = load();
-  const ui = { view: 'home', listId: null, draft: null, draftIsNew: false, errors: [], confirm: null, modal: null, revealed: new Set(), popNext: false };
+  const ui = { view: 'home', listId: null, draft: null, draftIsNew: false, errors: [], errorFields: new Set(), bulkReport: null, bulkType: '', confirm: null, modal: null, revealed: new Set(), popNext: false };
 
   // ---------- routes and progress ----------
   const byId = list => Object.fromEntries(list.items.map(i => [i.id, i]));
@@ -781,7 +797,24 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
 
   function viewEdit() {
     const d = ui.draft;
-    const errors = ui.errors.length ? `<div class="errors" id="edit-errors" role="alert">${ui.errors.map(e => `<p>${esc(e)}</p>`).join('')}</div>` : '';
+    // each error links to its field, and the field itself is marked, so the creator finds what to fix
+    const errors = ui.errors.length ? `<div class="errors" id="edit-errors" role="alert">${ui.errors.map(e => e.field
+      ? `<p><button class="err-link" data-action="goto-field" data-id="${esc(e.field)}">${esc(e.msg)}</button></p>`
+      : `<p>${esc(e.msg)}</p>`).join('')}</div>` : '';
+    const inv = id => (ui.errorFields.has(id) ? ' aria-invalid="true"' : '');
+    // the three steps show inside the item list while editing, so the order and the break are checked together
+    const goalIdx = d.goal ? d.items.findIndex(it => it.id === d.goal) : -1;
+    const stepHead = (no, label) => `<p class="edit-step"><span class="step-no">${no}</span>${label}</p>`;
+    let goalWarn = '';
+    if (goalIdx === 0 && d.items.length > 1) goalWarn = '区切りが1番目なので、「ここまで見れば話がわかる」の段がありません。';
+    else if (goalIdx > 0 && goalIdx === d.items.length - 1) goalWarn = '区切りが最後の項目なので、「もっと知りたくなったら」の段がありません。';
+    else if (goalIdx >= 6) goalWarn = `「ここまで見れば話がわかる」が${goalIdx}個あります。3〜5個にすると、気軽に見てもらいやすくなります。`;
+    const rep = ui.bulkReport;
+    const bulkReport = rep ? `<div class="bulk-report" id="bulk-report" role="status">
+        <p>${rep.added}件足しました。${rep.issues.length ? '次の行を確かめてください。' : ''}</p>
+        ${rep.issues.length ? `<ul>${rep.issues.map(x => `<li><span class="mono">${x.line}行目</span>「${esc(x.text)}」：${esc(x.reason)}</li>`).join('')}</ul>` : ''}
+      </div>` : '';
+    const bulkType = d.types.some(t => t.id === ui.bulkType) ? ui.bulkType : d.types[0].id;
     const typeRows = d.types.map((t, i) => {
       const used = d.items.some(it => it.type === t.id);
       return `<div class="row-type">
@@ -791,10 +824,18 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
     }).join('');
     const itemCards = d.items.map((it, i) => {
       const armed = ui.confirm === 'item:' + it.id;
-      return `<div class="edit-card" id="card-${esc(it.id)}">
+      const isGoal = i === goalIdx;
+      let head = '';
+      if (goalIdx >= 0) {
+        if (i === 0) head = stepHead(1, 'まずこの1つ');
+        else if (i === 1 && goalIdx >= 1) head = stepHead(2, 'ここまで見れば話がわかる');
+        if (i === goalIdx + 1) head = stepHead(3, 'もっと知りたくなったら');
+      }
+      return `${head}<div class="edit-card${isGoal ? ' is-goal' : ''}" id="card-${esc(it.id)}">
         <div class="edit-head">
           <span class="mono">${pad2(i + 1)}</span>
           <div class="mini-btns">
+            <button class="small-btn${isGoal ? ' primary' : ''}" data-action="set-goal" data-id="${isGoal ? '' : esc(it.id)}" aria-pressed="${isGoal}">${isGoal ? '区切りを外す' : 'ここで区切る'}</button>
             <button class="small-btn" data-action="move-item" data-i="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="上へ">↑</button>
             <button class="small-btn" data-action="move-item" data-i="${i}" data-dir="1" ${i === d.items.length - 1 ? 'disabled' : ''} aria-label="下へ">↓</button>
             <button class="small-btn${armed ? ' primary' : ''}" data-action="del-item" data-i="${i}">${armed ? '削除する' : '削除'}</button>
@@ -805,9 +846,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
           <label class="field"><span>種類</span><select id="type-sel-${esc(it.id)}" data-bind="items.${i}.type">${d.types.map(t => opt(t.id, t.label, t.id === it.type)).join('')}</select></label>
           <label class="field"><span>公開日（わかれば）</span><input type="date" id="date-${esc(it.id)}" data-bind="items.${i}.date" value="${esc(it.date)}"></label>
         </div>
-        <label class="field"><span>公式ページのURL</span><input type="url" id="url-${esc(it.id)}" data-bind="items.${i}.url" value="${esc(it.url)}" placeholder="https://" inputmode="url"></label>
-        <label class="field"><span>短い説明（自分の言葉で）</span><textarea id="note-${esc(it.id)}" data-bind="items.${i}.note" maxlength="800">${esc(it.note)}</textarea></label>
+        <label class="field"><span>公式ページのURL</span><input type="url" id="url-${esc(it.id)}" data-bind="items.${i}.url" value="${esc(it.url)}" placeholder="https://" inputmode="url"${inv('url-' + it.id)}></label>
+        <label class="field"><span>短い説明（自分の言葉で）</span><textarea id="note-${esc(it.id)}" data-bind="items.${i}.note" maxlength="800" placeholder="自分の言葉で短く（歌詞や公式の文章は書かない）">${esc(it.note)}</textarea></label>
         <label class="check-field"><input type="checkbox" id="spoiler-${esc(it.id)}" data-bind="items.${i}.spoiler" ${it.spoiler ? 'checked' : ''}> 説明にネタバレを含む（チェックするまで隠す）</label>
+        ${isGoal ? '<p class="edit-goal-note">ここまで見れば、話がわかる（区切り）</p>' : ''}
       </div>`;
     }).join('');
     const termCards = d.terms.map((t, i) => `<div class="edit-card">
@@ -819,7 +861,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
     const linkCards = d.links.map((l, i) => `<div class="edit-card">
         <div class="edit-head"><span class="field-label">リンク ${i + 1}</span><button class="small-btn" data-action="del-link" data-i="${i}">削除</button></div>
         <label class="field"><span>名前</span><input type="text" id="llabel-${i}" data-bind="links.${i}.label" value="${esc(l.label)}" maxlength="40" placeholder="例：公式サイト"></label>
-        <label class="field"><span>URL</span><input type="url" id="lurl-${i}" data-bind="links.${i}.url" value="${esc(l.url)}" placeholder="https://" inputmode="url"></label>
+        <label class="field"><span>URL</span><input type="url" id="lurl-${i}" data-bind="links.${i}.url" value="${esc(l.url)}" placeholder="https://" inputmode="url"${inv('lurl-' + i)}></label>
       </div>`).join('');
 
     return `<header class="bar"><div class="bar-in">
@@ -828,16 +870,26 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
       </div></header>
       <main class="wrap">
         <section><h1 class="list-title">${ui.draftIsNew ? 'リストを作る' : 'リストを編集'}</h1>${errors}</section>
+        <section class="rules" id="edit-rules">
+          <p class="rules-title">リストに書かないこと</p>
+          <ul>
+            <li>歌詞、公式の文章、画像。説明は自分の言葉で短く書く</li>
+            <li>攻略（ゲームの進め方や解き方）。書いてよいのは「第2章クリアで解放」のような、見るための条件まで。攻略サイトの文章も写さない</li>
+            <li>無断でアップロードされた動画などへのリンク。リンクは公式サイトか公式の配信だけにする</li>
+            <li>まだ見ていない人へのネタバレ。書くときは「説明にネタバレを含む」にチェックする</li>
+          </ul>
+        </section>
         <section class="stack">
           <h2 class="label">基本の情報</h2>
-          <label class="field"><span>リストの名前</span><input type="text" id="f-title" data-bind="title" value="${esc(d.title)}" maxlength="80" placeholder="例：ほしぞら組 追いつきリスト"></label>
+          <label class="field"><span>リストの名前</span><input type="text" id="f-title" data-bind="title" value="${esc(d.title)}" maxlength="80" placeholder="例：ほしぞら組 追いつきリスト"${inv('f-title')}></label>
           <label class="field"><span>作品名</span><input type="text" id="f-work" data-bind="work" value="${esc(d.work)}" maxlength="80" placeholder="例：ほしぞら組"></label>
           <div class="row2">
-            <label class="field"><span>作者の名前</span><input type="text" id="f-author" data-bind="author" value="${esc(d.author)}" maxlength="40"></label>
+            <label class="field"><span>作者の名前</span><input type="text" id="f-author" data-bind="author" value="${esc(d.author)}" maxlength="40" placeholder="ハンドルネームなど"></label>
             <label class="field"><span>最終確認日</span><input type="date" id="f-checked" data-bind="checkedAt" value="${esc(d.checkedAt)}"></label>
           </div>
+          <p class="hint">作者の名前は、共有リンクを受け取った人全員に見えます。本名ではなく、ハンドルネームなどにしてください（空でも大丈夫）。最終確認日は、リストの中身を公式で確かめた日です。</p>
           <label class="field"><span>リストの説明</span><textarea id="f-desc" data-bind="description" maxlength="600" placeholder="どんな人向けの追い方か、など">${esc(d.description)}</textarea></label>
-          <label class="check-field"><input type="checkbox" id="f-unofficial" data-bind="unofficial" ${d.unofficial ? 'checked' : ''}> 非公式のリストとして表示する</label>
+          <p class="hint">どのリストにも「非公式」と表示されます。</p>
         </section>
         <section class="stack">
           <h2 class="label">種類（入り口）</h2>
@@ -847,18 +899,22 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
         </section>
         <section class="stack">
           <h2 class="label">項目（この順番が「作者のおすすめ順」になります）</h2>
-          ${itemCards}
-          <div><button class="btn" data-action="add-item">項目を足す</button></div>
-          <div class="edit-card">
-            <span class="field-label">まとめて足す</span>
-            <p class="hint">1行に1項目。「種類,タイトル,公開日,URL」の順にカンマで区切ります。タイトルだけの行でも大丈夫です。</p>
-            <textarea id="bulk-text" placeholder="曲,初めての曲,2024-05-16,https://...&#10;ライブ,1stライブ"></textarea>
-            <div><button class="small-btn" data-action="bulk-add">まとめて足す</button></div>
-          </div>
+          <p class="hint">公式ページのURLには、公式サイトか公式の配信（公式チャンネルなど）だけを入れてください。</p>
           <div class="edit-card">
             <span class="field-label">布教の型（なくても大丈夫）</span>
+            <p class="hint">区切りを選ぶと、1番目が「まずこの1つ」、2番目から区切りまでが「ここまで見れば話がわかる」、残りが「もっと知りたくなったら」の3段に分かれて表示されます。区切りは3〜5番目あたりがおすすめです。各項目の「ここで区切る」でも選べます。</p>
             <label class="field"><span>「ここまで見れば話がわかる」の区切り</span><select id="f-goal" data-bind="goal"><option value=""${d.goal ? '' : ' selected'}>区切りなし</option>${d.items.map((it, i) => `<option value="${esc(it.id)}" data-n="${pad2(i + 1)}"${d.goal === it.id ? ' selected' : ''}>${pad2(i + 1)} ${esc(it.title || '（タイトル未入力）')} まで</option>`).join('')}</select></label>
-            <p class="hint">区切りを選ぶと、1番目が「まずこの1つ」、区切りまでが「ここまで見れば話がわかる」、残りが「もっと知りたくなったら」に分かれて表示されます。3〜5番目あたりがおすすめです。</p>
+            ${goalWarn ? `<p class="notice" id="goal-warn">${goalWarn}</p>` : ''}
+          </div>
+          ${itemCards}
+          <div><button class="btn" data-action="add-item">項目を足す</button></div>
+          <div class="edit-card" id="bulk-card">
+            <span class="field-label">まとめて足す</span>
+            <p class="hint">記事やメモから、1行に1項目ずつ貼り付けます。行の頭の番号や「・」は外し、URLと日付（2024-05-16、2024/5/16、2024年5月16日）は、行のどこにあっても読み取ります。行の頭に「曲,」のように種類の名前を書くと、その種類になります。</p>
+            <label class="field"><span>足す項目の種類</span><select id="bulk-type">${d.types.map(t => opt(t.id, t.label, t.id === bulkType)).join('')}</select></label>
+            <textarea id="bulk-text" placeholder="1. はじまりの一番星 2023/4/1 https://...&#10;・1stライブ「ファーストライト」"></textarea>
+            <div><button class="small-btn" data-action="bulk-add">まとめて足す</button></div>
+            ${bulkReport}
           </div>
         </section>
         <section class="stack">
@@ -874,7 +930,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
         </section>
         <section class="stack">
           <h2 class="label">間違いの報告先（なくても大丈夫）</h2>
-          <label class="field"><span>報告フォームのURL</span><input type="url" id="f-report" data-bind="reportUrl" value="${esc(d.reportUrl)}" placeholder="https://docs.google.com/forms/..." inputmode="url"></label>
+          <label class="field"><span>報告フォームのURL</span><input type="url" id="f-report" data-bind="reportUrl" value="${esc(d.reportUrl)}" placeholder="https://docs.google.com/forms/..." inputmode="url"${inv('f-report')}></label>
           <p class="hint">Googleフォームの事前入力リンクを入れると、各項目に「間違いを報告」が出ます。URLの中の {title} は項目のタイトルに置き換わります。</p>
         </section>
         <div class="btn-row"><button class="btn primary" data-action="save-edit">保存する</button><button class="btn" data-action="cancel-edit">キャンセル</button></div>
@@ -958,6 +1014,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
     if (listId !== undefined) ui.listId = listId;
     ui.confirm = null;
     ui.errors = [];
+    ui.errorFields = new Set();
+    ui.bulkReport = null;
     render();
     window.scrollTo(0, 0);
   }
@@ -969,40 +1027,72 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
     for (let i = 0; i < keys.length - 1; i++) { o = o[keys[i]]; if (o == null) return; }
     o[keys[keys.length - 1]] = val;
   }
-  function parseBulk(text, d) {
+  // Reads lines pasted from an article, a memo or a spreadsheet: one item per line.
+  // A leading number or bullet is dropped. A URL is picked up anywhere in the line, a date when it stands as its own
+  // word (so 「2024年5月16日の生配信」 stays a title). A leading 「曲,」 (an existing type name, then a comma or tab)
+  // sets the type; otherwise the chosen type is used. The rest is the title, so a title may contain commas.
+  // Nothing is changed silently: every line that needed a fix is reported back with its line number.
+  const BULLET = /^\s*(?:[-*•・●○◆◇■□▶▷►→]|[0-9０-９]{1,3}[.)．）]|[①-⑳]|[(（][0-9０-９]{1,3}[)）]|#[0-9]{1,3}(?=\s))\s*/;
+  const BAD_URL = /(^|[\s,，\t])((?:javascript|data|vbscript|file|blob):\S*)/i;
+  const WEB_URL = /https?:\/\/[^\s,，、。「」『』（）()<>]+/i;
+  const LONE_DATE = /(^|[\s,，\t])([0-9０-９]{4}[-/.／－．年][0-9０-９]{1,2}[-/.／－．月][0-9０-９]{1,2}日?)(?=$|[\s,，\t])/;
+  function parseBulk(text, d, typeId) {
+    const issues = [];
     let added = 0;
-    for (const line of text.split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      if (d.items.length >= MAX_ITEMS) break;
-      const parts = line.split(/\t|,|，/).map(s => s.trim());
-      let label = '', title, date = '', url = '';
-      if (parts.length === 1) title = parts[0];
-      else [label, title, date = '', url = ''] = parts;
-      if (!title) continue;
-      let type = d.types[0].id;
-      if (label) {
-        let t = d.types.find(x => x.label === label);
-        if (!t) { t = { id: uid('t'), label: label.slice(0, 20) }; d.types.push(t); }
-        type = t.id;
+    text.split(/\r?\n/).forEach((raw, n) => {
+      if (!raw.trim()) return;
+      const shown = raw.trim().length > 30 ? raw.trim().slice(0, 30) + '…' : raw.trim();
+      const note = reason => issues.push({ line: n + 1, text: shown, reason });
+      if (d.items.length >= MAX_ITEMS) { note(`項目が${MAX_ITEMS}件に達したので、足しませんでした`); return; }
+      let s = raw.replace(BULLET, '');
+      let url = '', date = '';
+      const bad = s.match(BAD_URL);
+      if (bad) { s = s.replace(bad[2], ' '); note('https:// で始まらないURLは使えないので、外しました'); }
+      const web = s.match(WEB_URL);
+      if (web) {
+        s = s.replace(web[0], ' ');
+        url = safeUrl(web[0]);
+        if (!url) note('URLが読めなかったので、外しました');
       }
-      d.items.push({ id: uid('i'), type, title: title.slice(0, 120), date: normDate(date), url: safeUrl(url), note: '', spoiler: false });
+      const dm = s.match(LONE_DATE);
+      if (dm) {
+        s = s.slice(0, dm.index) + dm[1] + s.slice(dm.index + dm[0].length);
+        date = normDate(toHalf(dm[2]));
+        if (!date) note('ありえない日付なので、日付を空にしました');
+      }
+      // the type is read before the trailing commas go, so 「曲,,」 is a type with no title, not a title 「曲」
+      s = s.replace(/^[\s,，\t:：]+/, '');
+      let type = typeId;
+      const head = s.match(/^([^,，\t]{1,20})[,，\t]/);
+      if (head) {
+        const label = head[1].trim();
+        const t = d.types.find(x => x.label === label);
+        if (t) { type = t.id; s = s.slice(head[0].length); }
+        else if (label.length <= 4) note(`「${label}」は種類の名前と違うので、タイトルに含めました。種類は項目ごとに選び直せます`);
+      }
+      s = s.replace(/^[\s,，\t:：]+|[\s,，\t:：]+$/g, '');
+      s = s.replace(/\t+/g, ' ').replace(/\s*([,，])(?:\s*[,，])+\s*/g, '$1 ').replace(/\s{2,}/g, ' ').trim();
+      if (!s) { note('タイトルがないので、足しませんでした'); return; }
+      if (s.length > 120) note('タイトルが長いので、120文字で切りました');
+      d.items.push({ id: uid('i'), type, title: s.slice(0, 120), date, url, note: '', spoiler: false });
       added++;
-    }
-    return added;
+    });
+    return { added, issues };
   }
   function commitDraft() {
     const d = ui.draft;
     const errs = [];
     d.title = str(d.title);
-    if (!d.title) errs.push('リストの名前を入れてください。');
+    if (!d.title) errs.push({ msg: 'リストの名前を入れてください。', field: 'f-title' });
     d.items = d.items.map(it => ({ ...it, title: str(it.title), url: str(it.url), note: str(it.note), date: normDate(it.date) })).filter(it => it.title);
-    if (!d.items.length) errs.push('項目を1つ以上入れてください（タイトルが空の項目は保存されません）。');
-    for (const it of d.items) if (it.url && !safeUrl(it.url)) errs.push(`「${it.title}」のURLが正しくありません。https:// から始まるURLを入れてください。`);
+    if (!d.items.length) errs.push({ msg: '項目を1つ以上入れてください（タイトルが空の項目は保存されません）。', field: '' });
+    for (const it of d.items) if (it.url && !safeUrl(it.url)) errs.push({ msg: `「${it.title}」のURLが正しくありません。https:// から始まるURLを入れてください。`, field: 'url-' + it.id });
     d.links = d.links.map(l => ({ label: str(l.label), url: str(l.url) })).filter(l => l.label || l.url);
-    for (const l of d.links) if (!safeUrl(l.url)) errs.push(`公式リンク「${l.label || l.url}」のURLが正しくありません。`);
-    if (str(d.reportUrl) && !safeUrl(d.reportUrl)) errs.push('報告フォームのURLが正しくありません。');
+    d.links.forEach((l, i) => { if (!safeUrl(l.url)) errs.push({ msg: `公式リンク「${l.label || l.url}」のURLが正しくありません。`, field: 'lurl-' + i }); });
+    if (str(d.reportUrl) && !safeUrl(d.reportUrl)) errs.push({ msg: '報告フォームのURLが正しくありません。', field: 'f-report' });
     if (errs.length) {
       ui.errors = errs;
+      ui.errorFields = new Set(errs.map(e => e.field).filter(Boolean));
       render();
       const el = document.getElementById('edit-errors');
       if (el) el.scrollIntoView({ block: 'center' });
@@ -1111,11 +1201,27 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
     },
     'bulk-add': () => {
       const ta = document.getElementById('bulk-text');
-      const n = parseBulk(ta ? ta.value : '', ui.draft);
+      const sel = document.getElementById('bulk-type');
+      if (sel) ui.bulkType = sel.value;
+      const typeId = ui.draft.types.some(t => t.id === ui.bulkType) ? ui.bulkType : ui.draft.types[0].id;
+      const rep = parseBulk(ta ? ta.value : '', ui.draft, typeId);
       // drop an untouched empty first row once real items arrive
       ui.draft.items = ui.draft.items.filter((it, idx, arr) => it.title || arr.length === 1 || idx > 0 || str(it.note) || str(it.url));
+      ui.bulkReport = rep;
       render();
-      toast(n ? `${n}件足しました` : '足せる行がありませんでした');
+      const box = document.getElementById('bulk-report');
+      if (box) box.scrollIntoView({ block: 'nearest' });
+      toast(rep.added ? `${rep.added}件足しました` : '足せる行がありませんでした');
+    },
+    'set-goal': el => {
+      ui.draft.goal = el.dataset.id || '';
+      render();
+      const card = el.dataset.id && document.getElementById('card-' + el.dataset.id);
+      if (card) card.scrollIntoView({ block: 'nearest' });
+    },
+    'goto-field': el => {
+      const f = document.getElementById(el.dataset.id);
+      if (f) { f.scrollIntoView({ block: 'center' }); f.focus({ preventScroll: true }); }
     },
     'add-term': () => { ui.draft.terms.push({ id: uid('w'), word: '', note: '', after: '' }); render(); },
     'del-term': el => { ui.draft.terms.splice(Number(el.dataset.i), 1); render(); },
@@ -1223,6 +1329,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
     const el = e.target;
     if (!ui.draft || !el.dataset || !el.dataset.bind) return;
     setPath(ui.draft, el.dataset.bind, el.type === 'checkbox' ? el.checked : el.value);
+    // the red mark leaves a field as soon as it is being fixed
+    if (el.getAttribute('aria-invalid')) { el.removeAttribute('aria-invalid'); ui.errorFields.delete(el.id); }
     if (el.dataset.itemId) {
       document.querySelectorAll(`select[data-bind$=".after"] option[value="${CSS.escape(el.dataset.itemId)}"]`)
         .forEach(o => { o.textContent = (el.value.trim() || '（タイトル未入力）') + ' のあと'; });
@@ -1242,7 +1350,12 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
       reader.readAsText(el.files[0]);
       return;
     }
-    if (ui.draft && el.dataset && el.dataset.bind) setPath(ui.draft, el.dataset.bind, el.type === 'checkbox' ? el.checked : el.value);
+    if (el.id === 'bulk-type') { ui.bulkType = el.value; return; }
+    if (ui.draft && el.dataset && el.dataset.bind) {
+      setPath(ui.draft, el.dataset.bind, el.type === 'checkbox' ? el.checked : el.value);
+      // a new break moves the step headings in the item list
+      if (el.dataset.bind === 'goal') render();
+    }
   });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && ui.modal) { ui.modal = null; render(); }

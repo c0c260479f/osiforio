@@ -1,6 +1,6 @@
 // Keeps the app usable offline and lets it be added to the home screen.
 // Bump CACHE when index.html changes so phones pick up the new version.
-const CACHE = 'oikake-list-v2';
+const CACHE = 'oikake-list-v3';
 const ASSETS = [
   './',
   './index.html',
