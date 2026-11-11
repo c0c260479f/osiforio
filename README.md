@@ -24,6 +24,7 @@
 - サーバーを持たない静的サイトです。リストとチェックの記録は、使う人のブラウザにだけ保存されます。
 - 共有リンクは、リストを圧縮して `#list=` のあとに入れたものです。`#` より後ろはサーバーに送られません。
 - `index.html` 1つで動き、ビルドはいりません。`manifest.webmanifest` と `sw.js` で、ホーム画面への追加とオフラインでの表示に対応しています。
+- アプリを開いても、ほかのサーバーには接続しません。ロゴと数字のフォント（Dela Gothic One、IBM Plex Mono）はこのサイトに置き、本文は端末のフォントで表示します。フォントの出どころとライセンス（SIL Open Font License 1.1）は [fonts/README.md](fonts/README.md) にまとめています。
 - リストのデータの形は [docs/list-format.md](docs/list-format.md) にまとめています。
 
 ## 動作確認

@@ -37,15 +37,47 @@ def check(name, cond, detail=""):
     results.append((name, bool(cond), detail))
 
 
+# the display font holds only these characters (fonts/README.md)
+DISPLAY_CHARS = set("".join((ROOT / "fonts" / "display-text.txt").read_text(encoding="utf-8").split()))
+# every character the page draws in the display font
+DISPLAY_TEXT_JS = """() => [...document.querySelectorAll('body *')]
+  .filter(el => getComputedStyle(el).fontFamily.includes('Dela Gothic One'))
+  .map(el => [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join(''))
+  .join('')"""
+# the offline copy made by sw.js holds both font files.
+# The app registers sw.js only over https, so the test registers it itself (127.0.0.1 counts as secure).
+SW_FONTS_JS = """async () => {
+  const timeout = new Promise(r => setTimeout(() => r('timeout'), 5000));
+  const work = (async () => {
+    await navigator.serviceWorker.register('sw.js');
+    await navigator.serviceWorker.ready;
+    const key = (await caches.keys()).find(k => k.startsWith('oikake-list'));
+    if (!key) return 'no cache';
+    const c = await caches.open(key);
+    const a = await c.match('fonts/dela-gothic-one-subset.woff2');
+    const b = await c.match('fonts/IBMPlexMono-Medium-Latin1.woff2');
+    return !!(a && b);
+  })();
+  return Promise.race([work, timeout]);
+}"""
+
+
+def display_text(page):
+    used = {c for c in page.evaluate(DISPLAY_TEXT_JS) if not c.isspace()}
+    return used, "".join(sorted(used - DISPLAY_CHARS))
+
+
 def main():
     httpd, url = serve()
     SHOTS.mkdir(parents=True, exist_ok=True)
     errors = []
+    requests = []
 
     def watch(page, tag=""):
         page.on("pageerror", lambda e: errors.append(f"{tag}{e}"))
         page.on("console", lambda m: errors.append(f"{tag}{m.text}")
                 if m.type == "error" and "Failed to load resource" not in m.text else None)
+        page.on("request", lambda r: requests.append((r.method, r.url, r.post_data)))
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -57,6 +89,14 @@ def main():
         page.wait_for_timeout(300)
         page.screenshot(path=str(SHOTS / "home.png"), full_page=True)
         check("home shows the sample list", page.locator(".list-card").count() == 1)
+
+        # fonts come from this site: the logo font holds the logo's characters, and both stay offline
+        fonts = page.evaluate("document.fonts.ready.then(() => [...document.fonts]"
+                              ".map(f => f.family.replace(/\"/g, '') + ':' + f.status))")
+        check("logo and number fonts load from this site",
+              "Dela Gothic One:loaded" in fonts and "IBM Plex Mono:loaded" in fonts, ", ".join(fonts))
+        used, missing = display_text(page)
+        check("logo characters are in the display font", "追" in used and not missing, missing)
 
         check("no in-app notice in a usual browser", page.locator(".in-app").count() == 0)
         page.click(".list-card")
@@ -72,6 +112,8 @@ def main():
         page.click("[data-action=check-next]")
         page.wait_for_timeout(150)
         check("meter moves to 10%", page.inner_text(".pct").startswith("10"), page.inner_text(".pct"))
+        used, missing = display_text(page)
+        check("meter characters are in the display font", "%" in used and not missing, missing)
         check("next moves on", "第1章" in page.inner_text(".next-title"), page.inner_text(".next-title"))
         page.locator(".item .check").nth(2).click()
         check("two items checked", "2 / 10" in page.inner_text(".count"), page.inner_text(".count"))
@@ -268,6 +310,21 @@ def main():
         p9.wait_for_selector(".preview", timeout=5000)
         p9.click("[data-action=save-import]")
         check("a list cannot drop the 非公式 label", "非公式" in p9.inner_text(".meta"), p9.inner_text(".meta"))
+
+        # the offline copy keeps both fonts (a fresh page, so the service worker changes nothing above)
+        p10 = browser.new_context(**phone).new_page()
+        watch(p10, "offline: ")
+        p10.goto(url)
+        cached = p10.evaluate(SW_FONTS_JS)
+        check("offline copy keeps the fonts", cached is True, str(cached))
+
+        # nothing about the visitor goes to another site: every request stays on the app's own site
+        origin = url.rsplit("/", 1)[0] + "/"
+        outside = [u for _, u, _ in requests if not u.startswith((origin, "blob:", "data:"))]
+        check("the app connects to no other site", requests and not outside, "; ".join(outside[:3]))
+        # and nothing is sent to the server: only reads, and the list never leaves the # part of a link
+        sent = [f"{m} {u}" for m, u, body in requests if m != "GET" or body or "list=" in u]
+        check("the app sends nothing to a server", requests and not sent, "; ".join(sent[:3]))
 
         check("no script errors", not errors, "; ".join(errors[:5]))
         browser.close()

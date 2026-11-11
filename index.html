@@ -12,10 +12,22 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="追いつき">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=IBM+Plex+Mono:wght@500&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<link rel="preload" href="fonts/dela-gothic-one-subset.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/IBMPlexMono-Medium-Latin1.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+/* Fonts live on this site, so opening the app connects to no other server (see fonts/README.md).
+   The display font holds only the characters in fonts/display-text.txt; body text uses the phone's own font. */
+@font-face {
+  font-family: "Dela Gothic One";
+  src: url("fonts/dela-gothic-one-subset.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Medium-Latin1.woff2") format("woff2");
+  font-weight: 500; font-style: normal; font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2013-2014, U+2018-201A, U+201C-201E, U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
+}
 /* Layout: one phone-width column. The list reads like a printed setlist (numbered, dashed rules); progress is a row of penlight-like segments. */
 :root {
   --paper: #F5F6FA;
@@ -33,7 +45,7 @@
   --focus: #2F5BD3;
   --scrim: rgba(16, 18, 30, 0.45);
   --font-display: "Dela Gothic One", "Hiragino Sans", "Noto Sans JP", sans-serif;
-  --font-body: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+  --font-body: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Noto Sans CJK JP", "Yu Gothic UI", Meiryo, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --radius: 14px;
 }

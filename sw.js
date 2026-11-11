@@ -1,6 +1,6 @@
 // Keeps the app usable offline and lets it be added to the home screen.
 // Bump CACHE when index.html changes so phones pick up the new version.
-const CACHE = 'oikake-list-v3';
+const CACHE = 'oikake-list-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -8,7 +8,9 @@ const ASSETS = [
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './fonts/dela-gothic-one-subset.woff2',
+  './fonts/IBMPlexMono-Medium-Latin1.woff2'
 ];
 
 self.addEventListener('install', event => {
@@ -27,7 +29,7 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // fonts go straight to the network
+  if (url.origin !== self.location.origin) return; // the app itself loads nothing from other sites
 
   // pages: try the network first so updates arrive, fall back to the saved copy offline.
   // Only the app page itself is saved, so opening test.html never replaces the offline copy.
