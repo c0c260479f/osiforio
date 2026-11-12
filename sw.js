@@ -1,6 +1,6 @@
 // Keeps the app usable offline and lets it be added to the home screen.
 // Bump CACHE when index.html changes so phones pick up the new version.
-const CACHE = 'oikake-list-v4';
+const CACHE = 'oikake-list-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -8,9 +8,7 @@ const ASSETS = [
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/apple-touch-icon.png',
-  './fonts/dela-gothic-one-subset.woff2',
-  './fonts/IBMPlexMono-Medium-Latin1.woff2'
+  './icons/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', event => {

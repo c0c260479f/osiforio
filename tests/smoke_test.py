@@ -37,16 +37,9 @@ def check(name, cond, detail=""):
     results.append((name, bool(cond), detail))
 
 
-# the display font holds only these characters (fonts/README.md)
-DISPLAY_CHARS = set("".join((ROOT / "fonts" / "display-text.txt").read_text(encoding="utf-8").split()))
-# every character the page draws in the display font
-DISPLAY_TEXT_JS = """() => [...document.querySelectorAll('body *')]
-  .filter(el => getComputedStyle(el).fontFamily.includes('Dela Gothic One'))
-  .map(el => [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join(''))
-  .join('')"""
-# the offline copy made by sw.js holds both font files.
+# the offline copy made by sw.js holds the app.
 # The app registers sw.js only over https, so the test registers it itself (127.0.0.1 counts as secure).
-SW_FONTS_JS = """async () => {
+SW_APP_JS = """async () => {
   const timeout = new Promise(r => setTimeout(() => r('timeout'), 5000));
   const work = (async () => {
     await navigator.serviceWorker.register('sw.js');
@@ -54,17 +47,43 @@ SW_FONTS_JS = """async () => {
     const key = (await caches.keys()).find(k => k.startsWith('oikake-list'));
     if (!key) return 'no cache';
     const c = await caches.open(key);
-    const a = await c.match('fonts/dela-gothic-one-subset.woff2');
-    const b = await c.match('fonts/IBMPlexMono-Medium-Latin1.woff2');
+    const a = await c.match('index.html');
+    const b = await c.match('icons/icon-192.png');
     return !!(a && b);
   })();
   return Promise.race([work, timeout]);
 }"""
 
+# WCAG contrast between an element's text and the first solid background behind it
+CONTRAST_JS = r"""sel => {
+  const el = document.querySelector(sel);
+  if (!el) return 0;
+  const rgb = s => (s.match(/[\d.]+/g) || []).map(Number);
+  let node = el, bg = null;
+  while (node) {
+    const c = rgb(getComputedStyle(node).backgroundColor);
+    if (c.length === 3 || (c.length === 4 && c[3] > 0)) { bg = c; break; }
+    node = node.parentElement;
+  }
+  bg = bg || [255, 255, 255];
+  const lum = c => {
+    const [r, g, b] = c.slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const a = lum(rgb(getComputedStyle(el).color)), b = lum(bg);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}"""
+STYLE_JS = "sel => (document.querySelector(sel) || {getAttribute: () => ''}).getAttribute('style') || ''"
+SAMPLE_COLOR = "#3cc4f0"
 
-def display_text(page):
-    used = {c for c in page.evaluate(DISPLAY_TEXT_JS) if not c.isspace()}
-    return used, "".join(sorted(used - DISPLAY_CHARS))
+
+def list_json(**extra):
+    """A one-item list, as a share link's plain JSON (j) code."""
+    data = {"format": "oikake-list", "version": 1, "id": "x-list", "title": "テスト用の共有リスト",
+            "types": [{"id": "song", "label": "曲"}], "items": [{"id": "x1", "type": "song", "title": "一曲目"}],
+            "routes": [{"id": "main", "label": "作者のおすすめ順", "order": ["x1"]}]}
+    data.update(extra)
+    return "j" + base64.urlsafe_b64encode(json.dumps(data, ensure_ascii=False).encode()).decode().rstrip("=")
 
 
 def main():
@@ -90,13 +109,11 @@ def main():
         page.screenshot(path=str(SHOTS / "home.png"), full_page=True)
         check("home shows the sample list", page.locator(".list-card").count() == 1)
 
-        # fonts come from this site: the logo font holds the logo's characters, and both stay offline
-        fonts = page.evaluate("document.fonts.ready.then(() => [...document.fonts]"
-                              ".map(f => f.family.replace(/\"/g, '') + ':' + f.status))")
-        check("logo and number fonts load from this site",
-              "Dela Gothic One:loaded" in fonts and "IBM Plex Mono:loaded" in fonts, ", ".join(fonts))
-        used, missing = display_text(page)
-        check("logo characters are in the display font", "追" in used and not missing, missing)
+        # only the phone's own fonts; the app's own screens stay plain, and a list's card shows its 推しカラー
+        check("no web fonts", page.evaluate("document.fonts.size") == 0, str(page.evaluate("document.fonts.size")))
+        home_btn = page.evaluate("getComputedStyle(document.querySelector('.btn.primary')).backgroundColor")
+        check("app buttons stay plain", home_btn == "rgb(27, 30, 45)", home_btn)
+        check("list card shows its 推しカラー", SAMPLE_COLOR in page.evaluate(STYLE_JS, ".list-card"))
 
         check("no in-app notice in a usual browser", page.locator(".in-app").count() == 0)
         page.click(".list-card")
@@ -108,12 +125,14 @@ def main():
         check("link shows its site", page.locator(".items .host").first.text_content() == "example.com",
               page.locator(".items .host").first.text_content())
         check("next shows its site", "example.com" in page.inner_text(".next"))
-        check("version shown", "2026.11.05版" in page.inner_text(".meta"), page.inner_text(".meta"))
+        check("version shown", "2026.11.12版" in page.inner_text(".meta"), page.inner_text(".meta"))
         page.click("[data-action=check-next]")
         page.wait_for_timeout(150)
         check("meter moves to 10%", page.inner_text(".pct").startswith("10"), page.inner_text(".pct"))
-        used, missing = display_text(page)
-        check("meter characters are in the display font", "%" in used and not missing, missing)
+        seg = page.evaluate("getComputedStyle(document.querySelector('.seg.on')).backgroundColor")
+        check("sample list is shown in its 推しカラー", seg == "rgb(60, 196, 240)", seg)
+        pct_ratio = page.evaluate(CONTRAST_JS, ".pct")
+        check("the light-blue number still reads", pct_ratio >= 4.5, f"{pct_ratio:.2f}")
         check("next moves on", "第1章" in page.inner_text(".next-title"), page.inner_text(".next-title"))
         page.locator(".item .check").nth(2).click()
         check("two items checked", "2 / 10" in page.inner_text(".count"), page.inner_text(".count"))
@@ -256,6 +275,15 @@ def main():
         p6.click(".list-card")
         check("old sample gets the steps", p6.locator(".step").count() == 3)
         check("old sample keeps checks", "1 / 10" in p6.inner_text(".count"), p6.inner_text(".count"))
+        # the unedited sample from 11/5 (before 推しカラー) is replaced too
+        p6.evaluate("""() => {
+            const st = JSON.parse(localStorage.getItem('oikake-list:v1'));
+            const s = st.lists['sample-hoshizora'];
+            s.goal = 's06'; s.updatedAt = '2026-11-05'; delete s.color;
+            localStorage.setItem('oikake-list:v1', JSON.stringify(st));
+        }""")
+        p6.goto(url)
+        check("the 11/5 sample gets its 推しカラー", SAMPLE_COLOR in p6.evaluate(STYLE_JS, ".list-card"))
 
         # opened inside LINE's own browser: tell the viewer to switch
         line = browser.new_context(**phone, user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari Line/14.2.0")
@@ -311,12 +339,69 @@ def main():
         p9.click("[data-action=save-import]")
         check("a list cannot drop the 非公式 label", "非公式" in p9.inner_text(".meta"), p9.inner_text(".meta"))
 
-        # the offline copy keeps both fonts (a fresh page, so the service worker changes nothing above)
+        # 推しカラー: every color reads at 4.5:1 (text, gray notes, buttons, the break note), in light and dark
+        for scheme in ("light", "dark"):
+            pc = browser.new_context(**phone, color_scheme=scheme).new_page()
+            watch(pc, f"color-{scheme}: ")
+            pc.goto(url)
+            pc.click(".list-card")
+            pc.click("[data-action=edit-list]")
+            swatches = pc.locator(".swatch:not(.none)")
+            low = []
+            for sw in swatches.all():
+                hex_, name = sw.get_attribute("data-color"), sw.get_attribute("aria-label")
+                sw.click()
+                if hex_ not in pc.evaluate(STYLE_JS, "#app"):
+                    low.append(f"{name}: not applied")
+                for sel in ("#color-preview .eyebrow", "#color-preview .next-title", "#color-preview .next-sub",
+                            ".wrap .btn.primary", ".edit-goal-note"):
+                    ratio = pc.evaluate(CONTRAST_JS, sel)
+                    if ratio < 4.5:
+                        low.append(f"{name} {sel} {ratio:.2f}")
+            check(f"every 推しカラー reads ({scheme})", swatches.count() == 10 and not low, "; ".join(low[:4]))
+            pc.locator(".swatch[aria-label='黄']").click()
+            pc.locator("#color-preview").scroll_into_view_if_needed()
+            pc.screenshot(path=str(SHOTS / f"edit-color-{scheme}.png"))
+
+        # a chosen color is saved with the list and travels in the share link
+        pk = browser.new_context(**phone).new_page()
+        watch(pk, "color-share: ")
+        pk.goto(url)
+        pk.click(".list-card")
+        pk.click("[data-action=edit-list]")
+        pk.click(".swatch[aria-label='黄']")
+        pk.locator("[data-action=save-edit]").first.click()
+        btn_ratio = pk.evaluate(CONTRAST_JS, ".next .btn.primary")
+        check("saved list takes the new 推しカラー", "#ffd21f" in pk.evaluate(STYLE_JS, "#app") and btn_ratio >= 4.5,
+              f"{btn_ratio:.2f}")
+        pk.screenshot(path=str(SHOTS / "list-yellow.png"), full_page=True)
+        pk.click("[data-action=open-share]")
+        pk.wait_for_selector("#share-url", timeout=5000)
+        shared = pk.input_value("#share-url")
+        pr = browser.new_context(**phone).new_page()
+        watch(pr, "color-receive: ")
+        pr.goto(shared)
+        pr.wait_for_selector(".preview", timeout=5000)
+        in_sheet = "#ffd21f" in pr.evaluate(STYLE_JS, ".sheet")
+        pr.click("[data-action=save-import]")
+        check("the share link carries the 推しカラー", in_sheet and "#ffd21f" in pr.evaluate(STYLE_JS, "#app"))
+
+        # a color that is not #rrggbb is dropped, so nothing else reaches the style attribute
+        pb = browser.new_context(**phone).new_page()
+        watch(pb, "bad-color: ")
+        pb.goto(url + "#list=" + list_json(color="red;background:url(https://example.com/x.png)"))
+        pb.wait_for_selector(".preview", timeout=5000)
+        sheet_style = pb.evaluate(STYLE_JS, ".sheet")
+        pb.click("[data-action=save-import]")
+        check("a strange 推しカラー is dropped", not sheet_style and not pb.evaluate(STYLE_JS, "#app"),
+              sheet_style or pb.evaluate(STYLE_JS, "#app"))
+
+        # the offline copy keeps the app (a fresh page, so the service worker changes nothing above)
         p10 = browser.new_context(**phone).new_page()
         watch(p10, "offline: ")
         p10.goto(url)
-        cached = p10.evaluate(SW_FONTS_JS)
-        check("offline copy keeps the fonts", cached is True, str(cached))
+        cached = p10.evaluate(SW_APP_JS)
+        check("offline copy keeps the app", cached is True, str(cached))
 
         # nothing about the visitor goes to another site: every request stays on the app's own site
         origin = url.rsplit("/", 1)[0] + "/"

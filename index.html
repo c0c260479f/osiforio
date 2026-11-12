@@ -12,47 +12,34 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="追いつき">
-<link rel="preload" href="fonts/dela-gothic-one-subset.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="fonts/IBMPlexMono-Medium-Latin1.woff2" as="font" type="font/woff2" crossorigin>
 <style>
-/* Fonts live on this site, so opening the app connects to no other server (see fonts/README.md).
-   The display font holds only the characters in fonts/display-text.txt; body text uses the phone's own font. */
-@font-face {
-  font-family: "Dela Gothic One";
-  src: url("fonts/dela-gothic-one-subset.woff2") format("woff2");
-  font-weight: 400; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("fonts/IBMPlexMono-Medium-Latin1.woff2") format("woff2");
-  font-weight: 500; font-style: normal; font-display: swap;
-  unicode-range: U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2013-2014, U+2018-201A, U+201C-201E, U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122, U+2212, U+FB01-FB02;
-}
-/* Layout: one phone-width column. The list reads like a printed setlist (numbered, dashed rules); progress is a row of penlight-like segments. */
+/* Layout: one phone-width column. The list reads like a printed setlist (numbered, dashed rules); progress is a row of penlight-like segments.
+   Type: only the phone's own fonts, so opening the app connects to no other server.
+   Color: the app itself stays plain (ink on paper); a list is shown in its creator's 推しカラー (see .oshi). */
 :root {
   --paper: #F5F6FA;
   --surface: #FFFFFF;
   --ink: #1B1E2D;
   --muted: #5E657A;
   --line: #DADEE8;
-  --accent: #C92F65;
-  --accent-soft: #FAE6EE;
-  --accent-ink: #A51F51;
+  --accent: #1B1E2D;
+  --accent-soft: #E9EBF2;
+  --accent-ink: #1B1E2D;
   --on-accent: #FFFFFF;
+  --accent-fill: var(--accent);
+  --accent-outline: transparent;
   --warn-soft: #FFF3D3;
   --warn-ink: #6F4E00;
   --danger: #B42318;
   --focus: #2F5BD3;
   --scrim: rgba(16, 18, 30, 0.45);
-  --font-display: "Dela Gothic One", "Hiragino Sans", "Noto Sans JP", sans-serif;
   --font-body: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Noto Sans CJK JP", "Yu Gothic UI", Meiryo, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --radius: 14px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --paper: #10121B; --surface: #181B27; --ink: #E7E9F1; --muted: #9AA1B6; --line: #2C3043;
-    --accent: #FF6B9A; --accent-soft: #351C28; --accent-ink: #FF93B6; --on-accent: #1B0A12;
+    --accent: #E7E9F1; --accent-soft: #262A3B; --accent-ink: #E7E9F1; --on-accent: #10121B;
     --warn-soft: #362C12; --warn-ink: #F0D07C; --danger: #FF8A7A; --focus: #8EA9FF;
     --scrim: rgba(0, 0, 0, 0.6);
     color-scheme: dark;
@@ -60,11 +47,22 @@
 }
 :root[data-theme="dark"] {
   --paper: #10121B; --surface: #181B27; --ink: #E7E9F1; --muted: #9AA1B6; --line: #2C3043;
-  --accent: #FF6B9A; --accent-soft: #351C28; --accent-ink: #FF93B6; --on-accent: #1B0A12;
+  --accent: #E7E9F1; --accent-soft: #262A3B; --accent-ink: #E7E9F1; --on-accent: #10121B;
   --warn-soft: #362C12; --warn-ink: #F0D07C; --danger: #FF8A7A; --focus: #8EA9FF;
   --scrim: rgba(0, 0, 0, 0.6);
   color-scheme: dark;
 }
+/* 推しカラー: oshiStyle() works out each list's shades so text and buttons stay readable; these rules pick them up.
+   --accent is for buttons, --accent-fill for the meter, --accent-ink for text, --accent-soft for tinted boxes,
+   and --accent-outline gives a light color (white, yellow) a thin edge so it does not vanish into the page. */
+.oshi {
+  --accent: var(--oshi-btn); --on-accent: var(--oshi-on); --accent-fill: var(--oshi);
+  --accent-ink: var(--oshi-ink-l); --accent-soft: var(--oshi-soft-l); --accent-outline: var(--oshi-outline-l);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .oshi { --accent-ink: var(--oshi-ink-d); --accent-soft: var(--oshi-soft-d); --accent-outline: var(--oshi-outline-d); }
+}
+:root[data-theme="dark"] .oshi { --accent-ink: var(--oshi-ink-d); --accent-soft: var(--oshi-soft-d); --accent-outline: var(--oshi-outline-d); }
 
 * { box-sizing: border-box; }
 :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--paper); }
@@ -78,6 +76,7 @@ body {
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.65;
+  font-variant-numeric: tabular-nums; /* digits keep one width, so counts and dates line up */
   -webkit-text-size-adjust: 100%;
 }
 body::before {
@@ -102,7 +101,7 @@ a { color: var(--accent-ink); }
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
 .bar-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.brand { font-family: var(--font-display); font-size: 19px; letter-spacing: 0.02em; }
+.brand { font-size: 19px; font-weight: 800; letter-spacing: 0.02em; }
 .wrap {
   max-width: 640px; margin: 0 auto;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
@@ -120,7 +119,7 @@ a { color: var(--accent-ink); }
 .list-title { font-size: 23px; line-height: 1.35; font-weight: 700; }
 .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 13px; color: var(--muted); }
 .badge { display: inline-block; font-size: 11.5px; font-weight: 700; line-height: 1.6; border: 1px solid currentColor; border-radius: 6px; padding: 0 6px; }
-.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.mono { font-variant-numeric: tabular-nums; }
 
 /* buttons */
 .btn-row { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -132,7 +131,7 @@ a { color: var(--accent-ink); }
   cursor: pointer; text-decoration: none;
 }
 .btn:hover { border-color: var(--muted); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent-outline); color: var(--on-accent); }
 .btn.primary:hover { filter: brightness(1.06); }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--accent-ink); padding: 0 6px; }
 .btn.danger { color: var(--danger); }
@@ -142,7 +141,7 @@ a { color: var(--accent-ink); }
   font: inherit; font-size: 13.5px; font-weight: 700; min-height: 36px; padding: 0 12px;
   border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
 }
-.small-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.small-btn.primary { background: var(--accent); border-color: var(--accent-outline); color: var(--on-accent); }
 .small-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
 .back { font: inherit; font-weight: 700; font-size: 14px; border: 0; background: none; color: var(--ink); cursor: pointer; padding: 8px 0; }
 
@@ -162,21 +161,21 @@ a { color: var(--accent-ink); }
 .lc-title { font-size: 16.5px; font-weight: 700; line-height: 1.4; }
 .lc-meter { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
 .mini { flex: 1; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.mini > span { display: block; height: 100%; background: var(--accent); }
-.lc-pct { font-family: var(--font-mono); font-size: 13px; color: var(--muted); min-width: 3.2em; text-align: right; }
+.mini > span { display: block; height: 100%; background: var(--accent-fill); box-shadow: inset 0 0 0 1px var(--accent-outline); }
+.lc-pct { font-size: 13px; color: var(--muted); min-width: 3.2em; text-align: right; }
 
 /* meter */
 .meter-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.pct { font-family: var(--font-display); font-size: 46px; line-height: 1; color: var(--accent-ink); }
+.pct { font-size: 46px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; color: var(--accent-ink); }
 .pct small { font-size: 20px; margin-left: 2px; }
 .count { font-size: 14px; color: var(--muted); }
 .segs { display: flex; gap: 3px; height: 12px; }
 .segs.dense { gap: 1px; }
 .seg { flex: 1; border-radius: 3px; background: var(--line); min-width: 0; }
 .segs.dense .seg { border-radius: 1px; }
-.seg.on { background: var(--accent); }
+.seg.on { background: var(--accent-fill); box-shadow: inset 0 0 0 1px var(--accent-outline); }
 .type-progress { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }
-.type-progress b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); }
+.type-progress b { font-weight: 700; color: var(--ink); }
 
 /* next */
 .next { background: var(--accent-soft); border-radius: var(--radius); padding: 16px; display: grid; gap: 8px; }
@@ -205,8 +204,8 @@ a { color: var(--accent-ink); }
   border: 1.5px solid var(--line); border-radius: 999px; padding: 4px 12px;
   background: var(--surface); color: var(--ink);
 }
-.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); font-weight: 700; }
-.chip .n { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-left: 4px; }
+.chip[aria-pressed="true"] { border-color: var(--accent-ink); background: var(--accent-soft); color: var(--accent-ink); font-weight: 700; }
+.chip .n { font-size: 12px; color: var(--muted); margin-left: 4px; }
 
 /* setlist items */
 .items { list-style: none; margin: 0; padding: 0; border-top: 1px dashed var(--line); }
@@ -214,13 +213,13 @@ a { color: var(--accent-ink); }
   display: grid; grid-template-columns: 2.1em 38px minmax(0, 1fr); gap: 10px; align-items: start;
   padding: 12px 0; border-bottom: 1px dashed var(--line);
 }
-.num { font-family: var(--font-mono); font-size: 13px; color: var(--muted); text-align: right; padding-top: 9px; font-variant-numeric: tabular-nums; }
+.num { font-size: 13px; color: var(--muted); text-align: right; padding-top: 9px; font-variant-numeric: tabular-nums; }
 .check {
   width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
   border: 2px solid var(--line); background: var(--surface); color: transparent; padding: 0;
 }
-.check:hover { border-color: var(--accent); }
-.check[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.check:hover { border-color: var(--accent-ink); }
+.check[aria-pressed="true"] { background: var(--accent); border-color: var(--accent-outline); color: var(--on-accent); }
 .item details { min-width: 0; }
 .item summary { list-style: none; cursor: pointer; display: grid; gap: 3px; padding-top: 6px; }
 .item summary::-webkit-details-marker { display: none; }
@@ -252,9 +251,9 @@ input[type="text"], input[type="url"], input[type="date"], textarea, select {
   border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 11px; width: 100%; min-width: 0;
 }
 textarea { min-height: 84px; resize: vertical; line-height: 1.55; }
-input:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+input:focus, textarea:focus, select:focus { border-color: var(--accent-ink); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
 .check-field { display: flex; align-items: center; gap: 8px; font-size: 14px; }
-.check-field input { width: 20px; height: 20px; accent-color: var(--accent); }
+.check-field input { width: 20px; height: 20px; accent-color: var(--accent-ink); }
 .edit-card { background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px; display: grid; gap: 10px; min-width: 0; }
 .edit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .edit-head .mono { color: var(--muted); font-size: 13px; }
@@ -293,7 +292,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
 .step-title { display: flex; align-items: center; gap: 8px; font-size: 15.5px; font-weight: 700; line-height: 1.4; }
 .step-no {
   flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
-  background: var(--ink); color: var(--paper); font-family: var(--font-mono); font-size: 13px;
+  background: var(--ink); color: var(--paper); font-size: 13px;
 }
 .step-goal { background: var(--accent-soft); color: var(--accent-ink); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; font-weight: 700; }
 
@@ -302,13 +301,22 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); outline
 .rules-title { font-size: 14px; font-weight: 700; }
 .rules ul, .bulk-report ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 13.5px; }
 .edit-step { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 700; line-height: 1.4; margin-top: 6px; }
-.edit-card.is-goal { border-color: var(--accent); }
+.edit-card.is-goal { border-color: var(--accent-ink); }
 .edit-goal-note { font-size: 13px; font-weight: 700; color: var(--accent-ink); }
 .bulk-report { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; display: grid; gap: 6px; overflow-wrap: anywhere; }
 input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 3px var(--warn-soft); }
 .err-link { all: unset; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .err-link:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; border-radius: 4px; }
-.host { font-family: var(--font-mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.host { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* 推しカラー: a stripe on each list's card, the swatches in the editor, and a preview of how the color reads */
+.list-card.oshi, .sheet.oshi .preview { box-shadow: inset 6px 0 0 var(--accent-fill), inset 7px 0 0 var(--accent-outline); padding-left: 20px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--sw); cursor: pointer; padding: 0; }
+.swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+.swatch.none { width: auto; padding: 0 14px; border-radius: 20px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 700; }
+.color-preview { padding: 12px 14px; gap: 2px; margin-top: 6px; }
+.color-preview .next-title { font-size: 16px; }
 @media (prefers-reduced-motion: reduce) { .pop { animation: none; } }
 </style>
 </head>
@@ -356,6 +364,60 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
   const fmtDate = d => (d ? d.replace(/-/g, '.') : '');
   const clone = o => JSON.parse(JSON.stringify(o));
 
+  // ---------- 推しカラー ----------
+  // A list can carry its creator's 推しカラー; the list's screens take that color and the app itself stays plain.
+  // Text in the color is made darker (lighter in dark mode) until it reads at 4.5:1 on every background it sits on.
+  const COLOR_RE = /^#[0-9a-f]{6}$/;
+  const PALETTE = [
+    ['#e53935', '赤'], ['#ff5ca8', 'ピンク'], ['#ff8a1f', 'オレンジ'], ['#ffd21f', '黄'], ['#9ad82e', '黄緑'],
+    ['#1fae5b', '緑'], ['#3cc4f0', '水色'], ['#2f6bff', '青'], ['#8a4fff', '紫'], ['#ffffff', '白']
+  ].map(([hex, label]) => ({ hex, label }));
+  const normColor = v => { const s = str(v).toLowerCase(); return COLOR_RE.test(s) ? s : ''; };
+  const colorName = hex => (PALETTE.find(p => p.hex === hex) || { label: hex }).label;
+  const rgbOf = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const hexOf = c => '#' + c.map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+  const lum = c => {
+    const [r, g, b] = c.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  // rounded, so the contrast is checked on exactly the color the page will show
+  const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  // moves color c toward `to` until it reads at 4.5:1 on every background in bgs
+  const readable = (c, to, bgs) => {
+    for (let t = 0; t < 1; t += 0.02) { const m = mix(c, to, t); if (bgs.every(bg => contrast(m, bg) >= 4.5)) return m; }
+    return to;
+  };
+  // the page colors of the light (l) and dark (d) themes, as in the CSS above
+  const THEMES = {
+    l: { surface: rgbOf('#ffffff'), paper: rgbOf('#f5f6fa'), ink: rgbOf('#1b1e2d'), muted: rgbOf('#5e657a'), to: [0, 0, 0] },
+    d: { surface: rgbOf('#181b27'), paper: rgbOf('#10121b'), ink: rgbOf('#e7e9f1'), muted: rgbOf('#9aa1b6'), to: [255, 255, 255] }
+  };
+  // CSS variables for one list's color. Only a checked #rrggbb gets through, so nothing else can reach the style attribute.
+  function oshiStyle(hex) {
+    hex = normColor(hex);
+    if (!hex) return '';
+    const c = rgbOf(hex), white = [255, 255, 255];
+    // a button keeps the color and takes whichever text reads better; a mid tone where neither reads gets a little darker
+    let btn = c, on = contrast(c, white) >= contrast(c, THEMES.l.ink) ? white : THEMES.l.ink;
+    if (contrast(btn, on) < 4.5) { btn = readable(c, [0, 0, 0], [white]); on = white; }
+    const vars = { oshi: hex, 'oshi-btn': hexOf(btn), 'oshi-on': hexOf(on) };
+    for (const [k, t] of Object.entries(THEMES)) {
+      // a tint for boxes, light enough that the usual text and the gray notes on it still read
+      let soft = t.surface;
+      for (let r = 0.18; r > 0; r -= 0.02) {
+        const s = mix(t.surface, c, r);
+        if (contrast(t.ink, s) >= 4.5 && contrast(t.muted, s) >= 4.5) { soft = s; break; }
+      }
+      const ink = readable(c, t.to, [t.surface, t.paper, soft]);
+      vars['oshi-soft-' + k] = hexOf(soft);
+      vars['oshi-ink-' + k] = hexOf(ink);
+      // a color close to the page (white, yellow) gets a thin edge so buttons and the meter stay visible
+      vars['oshi-outline-' + k] = contrast(btn, t.paper) < 1.6 ? hexOf(ink) : 'transparent';
+    }
+    return Object.entries(vars).map(([k, v]) => `--${k}:${v}`).join(';');
+  }
+
   const CHECK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const DEFAULT_TYPES = [
     { id: 'song', label: '曲' }, { id: 'story', label: 'ストーリー' }, { id: 'live', label: 'ライブ' },
@@ -364,6 +426,7 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
 
   // ---------- list format (version 1) ----------
   // items keep a fixed id forever, so a renamed or reordered item keeps the user's check.
+  const SAMPLE_VERSION = '2026-11-12';
   function sampleList() {
     const items = [
       ['s01', 'song', 'デビュー曲「はじまりの一番星」', '2023-04-01', 'https://example.com/', '最初に出た曲。ほしぞら組らしさがいちばんわかるので、まずはこの1曲だけ聴いてみて。', false],
@@ -383,7 +446,8 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
       work: 'ほしぞら組（架空のアイドルユニット）',
       author: 'サンプル作者',
       checkedAt: '2026-10-26',
-      updatedAt: '2026-11-05',
+      updatedAt: SAMPLE_VERSION,
+      color: '#3cc4f0', // 水色: ほしぞら (starry sky)
       description: '使い方を試すための架空のサンプルです。実在の作品・団体とは関係ありません。',
       unofficial: true,
       reportUrl: '',
@@ -405,7 +469,7 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
     const first = { id: uid('i'), type: 'song', title: '', date: '', url: '', note: '', spoiler: false };
     return {
       format: 'oikake-list', version: 1, id: uid('l'),
-      title: '', work: '', author: '', checkedAt: today(), description: '', unofficial: true, reportUrl: '',
+      title: '', work: '', author: '', checkedAt: today(), color: '', description: '', unofficial: true, reportUrl: '',
       links: [], types: clone(DEFAULT_TYPES), items: [first],
       routes: [{ id: 'main', label: '作者のおすすめ順', order: [first.id] }], terms: [], goal: ''
     };
@@ -458,6 +522,7 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
       author: str(raw.author).slice(0, 40),
       checkedAt: normDate(raw.checkedAt),
       updatedAt: normDate(raw.updatedAt),
+      color: normColor(raw.color), // the 推しカラー; anything but #rrggbb is dropped
       description: str(raw.description).slice(0, 600),
       unofficial: true, // every list here is fan-made, so the 非公式 label cannot be turned off
       reportUrl: safeUrl(raw.reportUrl),
@@ -487,9 +552,10 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
         if (!st.lists[id] || !p) continue;
         st.progress[id] = { checked: (p.checked && typeof p.checked === 'object') ? p.checked : {}, route: str(p.route) || 'main', filter: str(p.filter) || 'all' };
       }
-      // an older copy of the sample (before the three steps) is replaced; item ids stay, so checks stay
+      // an older copy of the sample (before the three steps, or the unedited copy from before 推しカラー) is replaced;
+      // item ids stay, so checks stay
       const old = st.lists[SAMPLE_ID];
-      if (old && old.sample && !old.goal) st.lists[SAMPLE_ID] = sampleList();
+      if (old && old.sample && (!old.goal || (old.updatedAt === '2026-11-05' && !old.color))) st.lists[SAMPLE_ID] = sampleList();
       return st;
     } catch (e) {
       storageOk = false;
@@ -616,7 +682,8 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
       const total = l.items.length;
       const done = l.items.filter(i => p.checked[i.id]).length;
       const pct = total ? Math.round(done / total * 100) : 0;
-      return `<button class="list-card" data-action="open-list" data-id="${esc(id)}">
+      const tint = oshiStyle(l.color);
+      return `<button class="list-card${tint ? ' oshi' : ''}"${tint ? ` style="${esc(tint)}"` : ''} data-action="open-list" data-id="${esc(id)}">
         <span class="lc-work">${esc(l.work || '作品名なし')}${l.sample ? ' ・ サンプル' : ''}</span>
         <span class="lc-title">${esc(l.title)}</span>
         <span class="lc-meter"><span class="mini" aria-hidden="true"><span style="width:${pct}%"></span></span><span class="lc-pct">${pct}%</span></span>
@@ -895,6 +962,19 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
           <h2 class="label">基本の情報</h2>
           <label class="field"><span>リストの名前</span><input type="text" id="f-title" data-bind="title" value="${esc(d.title)}" maxlength="80" placeholder="例：ほしぞら組 追いつきリスト"${inv('f-title')}></label>
           <label class="field"><span>作品名</span><input type="text" id="f-work" data-bind="work" value="${esc(d.work)}" maxlength="80" placeholder="例：ほしぞら組"></label>
+          <div class="field" role="group" aria-labelledby="color-label">
+            <span id="color-label">推しカラー</span>
+            <div class="swatches">
+              <button class="swatch none" data-action="set-color" data-color="" aria-pressed="${!d.color}">なし</button>
+              ${PALETTE.map(c => `<button class="swatch" data-action="set-color" data-color="${c.hex}" aria-pressed="${d.color === c.hex}" aria-label="${c.label}" title="${c.label}" style="--sw:${c.hex}"></button>`).join('')}
+            </div>
+            <div class="next color-preview" id="color-preview" aria-hidden="true">
+              <p class="eyebrow">次はこれ</p>
+              <p class="next-title">${esc((d.items[0] && str(d.items[0].title)) || 'このリストの1つ目')}</p>
+              <p class="next-sub">${d.color ? esc(colorName(d.color)) + 'で表示します' : '色なし（アプリの標準の色）で表示します'}</p>
+            </div>
+          </div>
+          <p class="hint">選んだ色で、このリストのボタンや「次はこれ」などを表示します。明るい色でも読めるように、文字は少し濃くします。</p>
           <div class="row2">
             <label class="field"><span>作者の名前</span><input type="text" id="f-author" data-bind="author" value="${esc(d.author)}" maxlength="40" placeholder="ハンドルネームなど"></label>
             <label class="field"><span>最終確認日</span><input type="date" id="f-checked" data-bind="checkedAt" value="${esc(d.checkedAt)}"></label>
@@ -1008,7 +1088,9 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
           ${exists ? `<p class="hint">同じリストがすでにあります${exists.updatedAt ? `（手元にあるのは${fmtDate(exists.updatedAt)}版）` : ''}。更新しても、チェックの記録はそのまま残ります。</p>` : ''}`
         : `<div class="btn-row"><button class="btn primary" data-action="do-import">読み込む</button><button class="btn" data-action="close-modal">閉じる</button></div>`}`;
     }
-    return `<div class="overlay" data-action="close-modal"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">${inner}</div>`;
+    // a shared list is previewed in its own 推しカラー
+    const tint = m.kind === 'import' && m.preview ? oshiStyle(m.preview.color) : '';
+    return `<div class="overlay" data-action="close-modal"></div><div class="sheet${tint ? ' oshi' : ''}"${tint ? ` style="${esc(tint)}"` : ''} role="dialog" aria-modal="true" aria-labelledby="sheet-title">${inner}</div>`;
   }
 
   function render() {
@@ -1017,6 +1099,11 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
     else if (ui.view === 'edit') html = viewEdit();
     else if (ui.view === 'backup') html = viewBackup();
     else html = viewHome();
+    // a list's screens (and the editor, as a live preview) take its 推しカラー; home and backup stay plain
+    const colored = ui.view === 'list' ? state.lists[ui.listId] : ui.view === 'edit' ? ui.draft : null;
+    const tint = oshiStyle(colored && colored.color);
+    $app.classList.toggle('oshi', !!tint);
+    if (tint) $app.setAttribute('style', tint); else $app.removeAttribute('style');
     $app.innerHTML = html + viewModal();
     document.body.style.overflow = ui.modal ? 'hidden' : '';
     ui.popNext = false;
@@ -1174,6 +1261,12 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
       go(back);
     },
     'save-edit': () => commitDraft(),
+    'set-color': el => {
+      ui.draft.color = normColor(el.dataset.color);
+      render();
+      const sw = document.querySelector(`.swatch[data-color="${ui.draft.color}"]`);
+      if (sw) sw.focus({ preventScroll: true });
+    },
     'add-item': () => {
       const d = ui.draft;
       const last = d.items[d.items.length - 1];
