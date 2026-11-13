@@ -168,6 +168,8 @@ a { color: var(--accent-ink); }
 .meter-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .pct { font-size: 46px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; color: var(--accent-ink); }
 .pct small { font-size: 20px; margin-left: 2px; }
+.pct .pre { margin: 0 4px 0 0; }
+.meter-label { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; color: var(--accent-ink); }
 .count { font-size: 14px; color: var(--muted); }
 .segs { display: flex; gap: 3px; height: 12px; }
 .segs.dense { gap: 1px; }
@@ -295,6 +297,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-ink); out
   background: var(--ink); color: var(--paper); font-size: 13px;
 }
 .step-goal { background: var(--accent-soft); color: var(--accent-ink); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; font-weight: 700; }
+.btn.more { width: 100%; font-size: 14.5px; }
 
 /* editor: what not to write, the steps inside the item list, the paste report, marked fields */
 .rules { border: 1.5px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; display: grid; gap: 6px; }
@@ -572,7 +575,7 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
   }
 
   let state = load();
-  const ui = { view: 'home', listId: null, draft: null, draftIsNew: false, errors: [], errorFields: new Set(), bulkReport: null, bulkType: '', confirm: null, modal: null, revealed: new Set(), popNext: false };
+  const ui = { view: 'home', listId: null, draft: null, draftIsNew: false, errors: [], errorFields: new Set(), bulkReport: null, bulkType: '', confirm: null, modal: null, revealed: new Set(), popNext: false, restOpen: new Set() };
 
   // ---------- routes and progress ----------
   const byId = list => Object.fromEntries(list.items.map(i => [i.id, i]));
@@ -675,6 +678,17 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
     return IN_APP ? '<p class="notice in-app">アプリの中のブラウザで開いています。ここで保存すると、ふだん使うブラウザとは別の場所に記録が残ることがあります。メニューから「ブラウザで開く」を選んでから使ってください。</p>' : '';
   }
 
+  // Until the viewer reaches the break (the last item of 「ここまで見れば話がわかる」), the meters count only
+  // the items up to it, so a long list does not open as a long to-do list. null for a list without a break.
+  function goalProgress(list, p) {
+    const main = routeOrder(list, 'main');
+    const idx = list.goal ? main.indexOf(list.goal) : -1;
+    if (idx < 0) return null;
+    const ids = main.slice(0, idx + 1);
+    const done = ids.filter(id => p.checked[id]).length;
+    return { ids, done, total: ids.length, reached: done === ids.length };
+  }
+
   function viewHome() {
     const cards = state.order.filter(id => state.lists[id]).map(id => {
       const l = state.lists[id];
@@ -682,12 +696,14 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
       const total = l.items.length;
       const done = l.items.filter(i => p.checked[i.id]).length;
       const pct = total ? Math.round(done / total * 100) : 0;
+      const gp = goalProgress(l, p);
+      const toGoal = gp && !gp.reached;
       const tint = oshiStyle(l.color);
       return `<button class="list-card${tint ? ' oshi' : ''}"${tint ? ` style="${esc(tint)}"` : ''} data-action="open-list" data-id="${esc(id)}">
         <span class="lc-work">${esc(l.work || '作品名なし')}${l.sample ? ' ・ サンプル' : ''}</span>
         <span class="lc-title">${esc(l.title)}</span>
-        <span class="lc-meter"><span class="mini" aria-hidden="true"><span style="width:${pct}%"></span></span><span class="lc-pct">${pct}%</span></span>
-        <span class="hint">${done} / ${total} 項目</span>
+        <span class="lc-meter"><span class="mini" aria-hidden="true"><span style="width:${toGoal ? Math.round(gp.done / gp.total * 100) : pct}%"></span></span><span class="lc-pct">${toGoal ? `あと${gp.total - gp.done}つ` : pct + '%'}</span></span>
+        <span class="hint">${toGoal ? `話がわかるまで ${gp.done} / ${gp.total}` : `${done} / ${total} 項目`}</span>
       </button>`;
     }).join('');
     return `<header class="bar"><div class="bar-in">
@@ -749,6 +765,20 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
     const goalIdx = list.goal ? mainOrder.indexOf(list.goal) : -1;
     const goalReached = goalIdx >= 0 && mainOrder.slice(0, goalIdx + 1).every(id => p.checked[id]);
     const stepped = goalIdx >= 0 && route === 'main' && filter === 'all';
+    // So the list does not look like homework, the default view first shows only the near part:
+    // with a break, 「もっと知りたくなったら」 stays folded until the break is reached; without one, only the first 3.
+    // Picking another order or an entry shows everything, and so does the 「ほかのN項目を見る」 button.
+    const gp = goalProgress(list, p);
+    const restOpen = ui.restOpen.has(list.id) || goalReached;
+    const meterHtml = gp && !gp.reached
+      ? `<p class="meter-label">話がわかるまで</p>
+          <div class="meter-top"><span class="pct"><small class="pre">あと</small>${gp.total - gp.done}<small>つ</small></span><span class="count mono">${gp.done} / ${gp.total}</span></div>
+          <div class="segs" aria-hidden="true">${gp.ids.map(id => `<span class="seg${p.checked[id] ? ' on' : ''}"></span>`).join('')}</div>`
+      : `${gp ? '<p class="meter-label">話がわかるところまで追いつきました ✓</p>' : ''}
+          <div class="meter-top"><span class="pct">${pct}<small>%</small></span><span class="count mono">${gp ? 'リスト全体 ' : ''}${done} / ${total} 項目</span></div>
+          <div class="segs${order.length > 60 ? ' dense' : ''}" aria-hidden="true">${segs}</div>
+          <div class="type-progress">${typeProgress}</div>`;
+    const moreBtn = n => `<button class="btn more" data-action="show-rest" data-id="${esc(list.id)}" aria-expanded="false">ほかの${n}項目を見る</button>`;
     const pending = visible.filter(it => !p.checked[it.id]);
     const nx = pending[0];
     let nextHtml;
@@ -816,15 +846,21 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
         if (!g.items.length) return '';
         no++;
         const endsAtGoal = gi === 1 || (gi === 0 && goalIdx === 0);
+        const folded = gi === 2 && !restOpen && g.items.length >= 2;
         return `<div class="step">
           <h3 class="step-title"><span class="step-no">${no}</span>${g.title}</h3>
           ${gi === 2 && entries ? `<p class="hint">上の${entries}で、気になる入り口から選べます。</p>` : ''}
-          <ol class="items">${g.items.map(rowHtml).join('')}</ol>
+          ${folded ? moreBtn(g.items.length) : `<ol class="items"${gi === 2 ? ' id="rest-items"' : ''}>${g.items.map(rowHtml).join('')}</ol>`}
           ${endsAtGoal ? goalNote : ''}
         </div>`;
       }).join('')}</div>`;
     } else {
-      itemsHtml = `<ol class="items">${visible.map(rowHtml).join('') || '<li class="empty">この入り口の項目はありません。</li>'}</ol>`;
+      const firstThree = visible.slice(0, 3);
+      const folded = !gp && route === 'main' && filter === 'all' && !ui.restOpen.has(list.id)
+        && visible.length - 3 >= 2 && !firstThree.every(it => p.checked[it.id]);
+      itemsHtml = folded
+        ? `<ol class="items">${firstThree.map(rowHtml).join('')}</ol>${moreBtn(visible.length - 3)}`
+        : `<ol class="items">${visible.map(rowHtml).join('') || '<li class="empty">この入り口の項目はありません。</li>'}</ol>`;
     }
 
     const terms = list.terms.length ? `<dl class="terms">${list.terms.map(t => {
@@ -853,9 +889,7 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
           ${storageNotice()}
         </section>
         <section aria-label="追いつき度">
-          <div class="meter-top"><span class="pct">${pct}<small>%</small></span><span class="count mono">${done} / ${total} 項目</span></div>
-          <div class="segs${order.length > 60 ? ' dense' : ''}" aria-hidden="true">${segs}</div>
-          <div class="type-progress">${typeProgress}</div>
+          ${meterHtml}
         </section>
         <section class="next${ui.popNext ? ' pop' : ''}" aria-live="polite">${nextHtml}</section>
         ${routeBtns || chips ? `<section class="controls"><h2 class="label">並び順と入り口</h2>${routeBtns}${chips}</section>` : ''}
@@ -1236,6 +1270,13 @@ input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--
     'set-route': el => { prog(ui.listId).route = el.dataset.id; save(); render(); },
     'set-filter': el => { prog(ui.listId).filter = el.dataset.id; save(); render(); },
     'reveal': el => { ui.revealed.add(el.dataset.key); render(); },
+    'show-rest': el => {
+      ui.restOpen.add(el.dataset.id);
+      render();
+      // keep the keyboard where the button was: on the first item that just appeared
+      const first = document.querySelector('#rest-items .check') || document.querySelectorAll('.items .item .check')[3];
+      if (first) first.focus({ preventScroll: true });
+    },
     'delete-list': () => {
       const id = ui.listId;
       if (ui.confirm !== 'list:' + id) { ui.confirm = 'list:' + id; render(); return; }

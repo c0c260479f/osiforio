@@ -108,6 +108,8 @@ def main():
         page.wait_for_timeout(300)
         page.screenshot(path=str(SHOTS / "home.png"), full_page=True)
         check("home shows the sample list", page.locator(".list-card").count() == 1)
+        check("home card counts toward the break", "あと5つ" in page.inner_text(".list-card .lc-pct"),
+              page.inner_text(".list-card .lc-pct"))
 
         # only the phone's own fonts; the app's own screens stay plain, and a list's card shows its 推しカラー
         check("no web fonts", page.evaluate("document.fonts.size") == 0, str(page.evaluate("document.fonts.size")))
@@ -122,20 +124,26 @@ def main():
         check("sample shows the three steps", len(steps) == 3 and "まずこの1つ" in steps[0]
               and "ここまで見れば話がわかる" in steps[1] and "もっと知りたくなったら" in steps[2], " / ".join(steps))
         check("goal note after step 2", page.locator(".step").nth(1).locator(".step-goal").count() == 1)
+        # not homework: the meter counts only up to the break, and 「もっと知りたくなったら」 starts folded
+        meter = page.inner_text("[aria-label=追いつき度]")
+        check("meter starts at the break", "話がわかるまで" in meter and "あと5つ" in page.inner_text(".pct"), meter[:40])
+        rest = page.locator(".step").nth(2)
+        check("the rest starts folded", rest.locator(".item").count() == 0 and "ほかの5項目を見る" in rest.inner_text(),
+              rest.inner_text()[:80])
         check("link shows its site", page.locator(".items .host").first.text_content() == "example.com",
               page.locator(".items .host").first.text_content())
         check("next shows its site", "example.com" in page.inner_text(".next"))
         check("version shown", "2026.11.12版" in page.inner_text(".meta"), page.inner_text(".meta"))
         page.click("[data-action=check-next]")
         page.wait_for_timeout(150)
-        check("meter moves to 10%", page.inner_text(".pct").startswith("10"), page.inner_text(".pct"))
+        check("meter counts toward the break", "あと4つ" in page.inner_text(".pct"), page.inner_text(".pct"))
         seg = page.evaluate("getComputedStyle(document.querySelector('.seg.on')).backgroundColor")
         check("sample list is shown in its 推しカラー", seg == "rgb(60, 196, 240)", seg)
         pct_ratio = page.evaluate(CONTRAST_JS, ".pct")
         check("the light-blue number still reads", pct_ratio >= 4.5, f"{pct_ratio:.2f}")
         check("next moves on", "第1章" in page.inner_text(".next-title"), page.inner_text(".next-title"))
         page.locator(".item .check").nth(2).click()
-        check("two items checked", "2 / 10" in page.inner_text(".count"), page.inner_text(".count"))
+        check("two items checked", "2 / 5" in page.inner_text(".count"), page.inner_text(".count"))
 
         page.click("button.chip:has-text('ライブから')")
         check("entry filter", "1stライブ" in page.inner_text(".next-title"), page.inner_text(".next-title"))
@@ -170,7 +178,7 @@ def main():
         check("link opens a preview", "ほしぞら組" in p2.inner_text(".preview"))
         check("link is removed from the address", "#list=" not in p2.url and "openExternalBrowser" not in p2.url, p2.url)
         p2.click("[data-action=save-import]")
-        check("saved on the other phone", "0 / 10" in p2.inner_text(".count"), p2.inner_text(".count"))
+        check("saved on the other phone", "0 / 5" in p2.inner_text(".count"), p2.inner_text(".count"))
         p2.screenshot(path=str(SHOTS / "opened-from-link.png"))
 
         # edit keeps checks
@@ -188,8 +196,12 @@ def main():
         sw, cw = page.evaluate("[document.documentElement.scrollWidth, document.documentElement.clientWidth]")
         check("no sideways scroll in the editor", sw <= cw, f"{sw} > {cw}")
         page.locator("[data-action=save-edit]").first.click()
-        check("item added, checks kept", "2 / 11" in page.inner_text(".count"), page.inner_text(".count"))
+        check("item added, checks kept", "2 / 5" in page.inner_text(".count")
+              and "ほかの6項目を見る" in page.locator(".step").nth(2).inner_text(), page.inner_text(".count"))
         check("steps kept after editing", page.locator(".step").count() == 3)
+        if page.locator("[data-action=show-rest]").count():
+            page.click("[data-action=show-rest]")
+        check("opening shows the rest", page.locator(".step").nth(2).locator(".item").count() == 6)
         today = page.evaluate("(() => { const d = new Date(); return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`; })()")
         check("saving updates the version", f"{today}版" in page.inner_text(".meta"), page.inner_text(".meta"))
 
@@ -201,7 +213,7 @@ def main():
         page.wait_for_selector(".preview", timeout=5000)
         check("update offered", "更新" in page.inner_text(".sheet"))
         page.click("[data-action=save-import]")
-        check("update kept checks", "2 / 10" in page.inner_text(".count"), page.inner_text(".count"))
+        check("update kept checks", "2 / 5" in page.inner_text(".count"), page.inner_text(".count"))
 
         page.click("[data-action=go-home]")
         page.click("[data-action=open-import]")
@@ -258,6 +270,10 @@ def main():
             p5.click("[data-action=check-next]")
             p5.wait_for_timeout(80)
         check("goal reached message", "ここまでで話がわかります" in p5.inner_text(".next"), p5.inner_text(".next")[:60])
+        check("the rest opens at the break", p5.locator(".step").nth(2).locator(".item").count() == 5)
+        meter5 = p5.inner_text("[aria-label=追いつき度]")
+        check("meter shows the whole list after the break", "追いつきました" in meter5 and "リスト全体 5 / 10" in meter5
+              and p5.inner_text(".pct").startswith("50"), meter5[:80])
         p5.screenshot(path=str(SHOTS / "goal-reached.png"), full_page=True)
 
         # an older copy of the sample gets the steps, and its checks stay
@@ -274,7 +290,7 @@ def main():
         p6.goto(url)
         p6.click(".list-card")
         check("old sample gets the steps", p6.locator(".step").count() == 3)
-        check("old sample keeps checks", "1 / 10" in p6.inner_text(".count"), p6.inner_text(".count"))
+        check("old sample keeps checks", "1 / 5" in p6.inner_text(".count"), p6.inner_text(".count"))
         # the unedited sample from 11/5 (before 推しカラー) is replaced too
         p6.evaluate("""() => {
             const st = JSON.parse(localStorage.getItem('oikake-list:v1'));
@@ -395,6 +411,30 @@ def main():
         pb.click("[data-action=save-import]")
         check("a strange 推しカラー is dropped", not sheet_style and not pb.evaluate(STYLE_JS, "#app"),
               sheet_style or pb.evaluate(STYLE_JS, "#app"))
+
+        # a long list without a break shows only its first 3; the rest opens on demand, or after the first 3
+        long_items = [{"id": f"y{i}", "type": "song", "title": f"曲{i}"} for i in range(1, 9)]
+        long_code = list_json(id="y-list", title="区切りのない長いリスト", items=long_items,
+                              routes=[{"id": "main", "label": "作者のおすすめ順", "order": [it["id"] for it in long_items]}])
+        pl = browser.new_context(**phone).new_page()
+        watch(pl, "long: ")
+        pl.goto(url + "#list=" + long_code)
+        pl.wait_for_selector(".preview", timeout=5000)
+        pl.click("[data-action=save-import]")
+        more = pl.locator("[data-action=show-rest]")
+        check("a long list shows its first 3", pl.locator(".items .item").count() == 3
+              and more.count() == 1 and "ほかの5項目を見る" in more.inner_text())
+        if pl.locator("[data-action=show-rest]").count():
+            pl.click("[data-action=show-rest]")
+        check("the rest opens on demand", pl.locator(".items .item").count() == 8)
+        focused = pl.evaluate("document.activeElement.getAttribute('aria-label') || ''")
+        check("focus moves to the first new item", focused.startswith("曲4"), focused)
+        pl.goto(url)
+        pl.click(".list-card:has-text('区切りのない長いリスト')")
+        for _ in range(3):
+            pl.click("[data-action=check-next]")
+            pl.wait_for_timeout(80)
+        check("the rest opens after the first 3", pl.locator(".items .item").count() == 8)
 
         # the offline copy keeps the app (a fresh page, so the service worker changes nothing above)
         p10 = browser.new_context(**phone).new_page()
